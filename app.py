@@ -29,23 +29,28 @@ def lttb_downsample(x, y, n_target):
         return x, y
 
     n_target = max(3, n_target)
-    bucket_size = (n - 2) / (n_target - 2)
+    bucket_size = float((n - 2) / (n_target - 2))
 
-    # Convert datetime64 x to int64 nanoseconds for safe numeric math
-    x_is_datetime = np.issubdtype(x.dtype, np.datetime64)
-    if x_is_datetime:
-        x_num = x.astype("datetime64[ns]").astype(np.int64)
+    # ── Robust numeric conversion for x ─────────────────────
+    x_dtype = getattr(x, "dtype", None)
+    if x_dtype is not None and np.issubdtype(x_dtype, np.datetime64):
+        x_num = np.asarray(x, dtype=np.int64).ravel().astype(float)
     else:
-        x_num = np.asarray(x, dtype=float)
+        x_num = np.asarray(x, dtype=float).ravel()
 
-    y_num = np.asarray(y, dtype=float)
+    # ── Robust numeric conversion for y ─────────────────────
+    y_num = np.asarray(y, dtype=float).ravel()
+
+    # ── Verify 1D shape ────────────────────────────────────
+    assert x_num.ndim == 1 and y_num.ndim == 1, \
+        f"x/y must be 1D arrays, got x={x_num.shape} y={y_num.shape}"
 
     result_x = [x[0]]
     result_y = [y[0]]
 
     a_idx = 0
-    ax = float(x_num[a_idx])
-    ay = float(y_num[a_idx])
+    ax = x_num[a_idx].item()
+    ay = y_num[a_idx].item()
 
     for i in range(n_target - 2):
         buck_start = int((i + 0) * bucket_size) + 1
@@ -59,10 +64,10 @@ def lttb_downsample(x, y, n_target):
         max_area = -1.0
         max_area_idx = buck_start
         for j in range(buck_start, buck_end + 1):
-            dx_a   = ax - avg_x
-            dy_j   = float(y_num[j]) - ay
-            dx_j   = float(x_num[j]) - avg_x
-            area   = abs(dx_a * dy_j - dx_j * (avg_y - ay))
+            dx_a = ax - avg_x
+            dy_j = y_num[j].item() - ay
+            dx_j = x_num[j].item() - avg_x
+            area = abs(dx_a * dy_j - dx_j * (avg_y - ay))
             if area > max_area:
                 max_area = area
                 max_area_idx = j
@@ -70,8 +75,8 @@ def lttb_downsample(x, y, n_target):
         result_x.append(x[max_area_idx])
         result_y.append(y[max_area_idx])
         a_idx = max_area_idx
-        ax = float(x_num[a_idx])
-        ay = float(y_num[a_idx])
+        ax = x_num[a_idx].item()
+        ay = y_num[a_idx].item()
 
     result_x.append(x[-1])
     result_y.append(y[-1])
