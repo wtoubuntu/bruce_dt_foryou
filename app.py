@@ -53,13 +53,13 @@ def lttb_downsample(x, y, n_target):
         avg_y = np.mean(y[next_buck_start:next_buck_end + 1])
 
         # Find point in current bucket with max triangle area
-        max_area = -1
+        max_area = -1.0
         max_area_idx = buck_start
         ax = x[a_idx]
         ay = y[a_idx]
         for j in range(buck_start, buck_end + 1):
             area = abs(
-                (ax - avg_x) * (y[j] - ay) - (ax - x[j]) * (avg_y - ay)
+                float((ax - avg_x) * (y[j] - ay) - (ax - x[j]) * (avg_y - ay))
             )
             if area > max_area:
                 max_area = area
@@ -311,7 +311,7 @@ if st.session_state.datasets:
                     ["All (native)", "1min", "2min", "5min", "10min", "15min", "30min", "1h", "2h", "4h", "6h", "12h", "1D"],
                     index=["All (native)", "1min", "2min", "5min", "10min", "15min", "30min", "1h", "2h", "4h", "6h", "12h", "1D"].index(st.session_state.resample_rule),
                     key="ts_resample_k",
-                    on_change=lambda v: st.session_state.__setitem__("resample_rule", v),
+                    on_change=lambda: st.session_state.__setitem__("resample_rule", st.session_state.ts_resample_k),
                 )
 
             # File selector for overlay
@@ -448,7 +448,7 @@ if st.session_state.datasets:
                     ["All (native)", "1min", "2min", "5min", "10min", "15min", "30min", "1h", "2h", "4h", "6h", "12h", "1D"],
                     index=["All (native)", "1min", "2min", "5min", "10min", "15min", "30min", "1h", "2h", "4h", "6h", "12h", "1D"].index(st.session_state.resample_rule),
                     key="sc_resample_k",
-                    on_change=lambda v: st.session_state.__setitem__("resample_rule", v),
+                    on_change=lambda: st.session_state.__setitem__("resample_rule", st.session_state.sc_resample_k),
                 )
 
             # Max points control — only shown when resample = "All (native)"
