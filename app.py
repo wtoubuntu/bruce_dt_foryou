@@ -852,11 +852,11 @@ if st.session_state.datasets:
                 interval_map = {
                     "15min": "15T",
                     "30min": "30T",
-                    "1H":    "1H",
-                    "2H":    "2H",
-                    "4H":    "4H",
-                    "6H":    "6H",
-                    "12H":   "12H",
+                    "1H":    "1h",
+                    "2H":    "2h",
+                    "4H":    "4h",
+                    "6H":    "6h",
+                    "12H":   "12h",
                     "1D":    "1D",
                 }
                 rule = interval_map[tod_interval]
