@@ -138,6 +138,10 @@ uploaded_files = st.file_uploader(
 if "datasets" not in st.session_state:
     st.session_state.datasets = {}  # {filename: {"df": ..., "metadata": ..., "type": ...}}
 
+# ── Shared resample rule (synced across Time Series & Scatter tabs)
+if "resample_rule" not in st.session_state:
+    st.session_state.resample_rule = "All (native)"
+
 if uploaded_files:
     for uploaded_file in uploaded_files:
         if uploaded_file.name in st.session_state.datasets:
@@ -305,8 +309,9 @@ if st.session_state.datasets:
                 resample_rule = st.selectbox(
                     "⏱️ Resample to",
                     ["All (native)", "1min", "2min", "5min", "10min", "15min", "30min", "1h", "2h", "4h", "6h", "12h", "1D"],
-                    index=0,
-                    key="ts_resample",
+                    index=["All (native)", "1min", "2min", "5min", "10min", "15min", "30min", "1h", "2h", "4h", "6h", "12h", "1D"].index(st.session_state.resample_rule),
+                    key="ts_resample_k",
+                    on_change=lambda v: st.session_state.__setitem__("resample_rule", v),
                 )
 
             # File selector for overlay
@@ -441,8 +446,9 @@ if st.session_state.datasets:
                 resample_rule_sc = st.selectbox(
                     "⏱️ Resample to",
                     ["All (native)", "1min", "2min", "5min", "10min", "15min", "30min", "1h", "2h", "4h", "6h", "12h", "1D"],
-                    index=0,
-                    key="ts_resample",
+                    index=["All (native)", "1min", "2min", "5min", "10min", "15min", "30min", "1h", "2h", "4h", "6h", "12h", "1D"].index(st.session_state.resample_rule),
+                    key="sc_resample_k",
+                    on_change=lambda v: st.session_state.__setitem__("resample_rule", v),
                 )
 
             # Max points control — only shown when resample = "All (native)"
