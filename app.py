@@ -293,8 +293,8 @@ if st.session_state.datasets:
     # ══════════════════════════════════════════════════════════
     st.subheader("🎨 Visualizations")
 
-    viz_tab1, viz_tab2, viz_tab3 = st.tabs(
-        ["📈 Time Series", "📊 Scatter Plot", "📊 Statistics"]
+    viz_tab1, viz_tab2, viz_tab3, viz_tab4 = st.tabs(
+        ["📈 Time Series", "📊 Scatter Plot", "📊 Statistics", "🌐 3D Visualization"]
     )
 
     # ── Time Series ──────────────────────────────────────────
@@ -918,6 +918,240 @@ if st.session_state.datasets:
                         "text/html",
                         key="dl_tod_box"
                     )
+
+    st.divider()
+
+    # ══════════════════════════════════════════════════════════
+    # 3D VISUALIZATION
+    # ══════════════════════════════════════════════════════════
+    with viz_tab4:
+        st.markdown("**3D scatter & line plots — explore relationships across three dimensions**")
+
+        if len(num_cols) < 2:
+            st.warning("⚠️ Need at least 2 numeric columns for 3D visualization.")
+        else:
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                plot_mode = st.selectbox(
+                    "Plot mode",
+                    ["3D Scatter", "3D Line / Time Series"],
+                    key="3d_mode"
+                )
+            with col2:
+                height_3d = st.slider("Chart height (px)", 400, 900, 600, key="3d_height")
+
+            avail_files_3d = list(st.session_state.datasets.keys())
+
+            if plot_mode == "3D Scatter":
+                col_x, col_y, col_z = st.columns([1, 1, 1])
+                with col_x:
+                    x_axis = st.selectbox("X-axis", num_cols, key="3d_x")
+                with col_y:
+                    y_axis = st.selectbox("Y-axis", num_cols, key="3d_y")
+                with col_z:
+                    z_axis = st.selectbox("Z-axis", num_cols, key="3d_z")
+
+                # File selection for overlay
+                selected_3d = st.multiselect(
+                    "📂 Select files to overlay",
+                    avail_files_3d,
+                    default=avail_files_3d[:1] if len(avail_files_3d) == 1 else avail_files_3d,
+                    key="3d_files"
+                )
+
+                # Max points control
+                max_3d = st.selectbox(
+                    "📊 Max points per file",
+                    [500, 1000, 2000, 5000, "All"],
+                    index=2,
+                    key="3d_max_pts",
+                    format_func=lambda x: str(x) if isinstance(x, int) else x,
+                )
+
+                if not selected_3d:
+                    st.info("Select at least one file.")
+                else:
+                    fig = go.Figure()
+                    colors = px.colors.qualitative.Plotly + px.colors.qualitative.Dark24
+
+                    for i, fname in enumerate(selected_3d):
+                        ds = st.session_state.datasets[fname]
+                        df_p = ds["df"]
+
+                        if x_axis not in df_p.columns or y_axis not in df_p.columns or z_axis not in df_p.columns:
+                            st.warning(f"`{fname}` missing required columns — skipped.")
+                            continue
+
+                        plot_df = df_p[[x_axis, y_axis, z_axis]].dropna()
+
+                        # Downsample if needed
+                        if max_3d != "All" and len(plot_df) > max_3d:
+                            x_raw = plot_df[x_axis].values.astype(float)
+                            y_raw = plot_df[y_axis].values.astype(float)
+                            z_raw = plot_df[z_axis].values.astype(float)
+                            # Downsample x,y then pick matching z
+                            _, idx_ds = lttb_downsample(
+                                np.arange(len(x_raw)), x_raw, max_3d
+                            )
+                            x_vals = x_raw[idx_ds]
+                            y_vals = y_raw[idx_ds]
+                            z_vals = z_raw[idx_ds]
+                        else:
+                            x_vals = plot_df[x_axis].values
+                            y_vals = plot_df[y_axis].values
+                            z_vals = plot_df[z_axis].values
+
+                        color = colors[i % len(colors)]
+                        fig.add_trace(go.Scatter3d(
+                            x=x_vals.tolist(),
+                            y=y_vals.tolist(),
+                            z=z_vals.tolist(),
+                            mode='markers',
+                            name=fname,
+                            marker=dict(
+                                color=color,
+                                size=5,
+                                opacity=0.65,
+                                line=dict(width=0.5, color='rgba(0,0,0,0.3)')
+                            ),
+                            hovertemplate=(
+                                f"<b>{fname}</b><br>"
+                                f"{x_axis}: %{{x:.3f}}<br>"
+                                f"{y_axis}: %{{y:.3f}}<br>"
+                                f"{z_axis}: %{{z:.3f}}<extra></extra>"
+                            ),
+                        ))
+
+                    fig.update_layout(
+                        title=dict(text=f"3D Scatter: {x_axis} × {y_axis} × {z_axis}", font_size=16),
+                        template="plotly_white",
+                        height=height_3d,
+                        scene=dict(
+                            xaxis_title=x_axis,
+                            yaxis_title=y_axis,
+                            zaxis_title=z_axis,
+                            camera=dict(eye=dict(x=1.5, y=1.5, z=1.2)),
+                        ),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+                        margin=dict(l=0, r=0, b=0, t=40),
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    buf = io.StringIO()
+                    fig.write_html(buf)
+                    st.download_button(
+                        "📥 Download HTML",
+                        buf.getvalue(),
+                        f"3d_scatter_{x_axis}_{y_axis}_{z_axis}.html",
+                        "text/html",
+                        key="dl_3d_scatter"
+                    )
+
+            else:  # 3D Line / Time Series
+                # Detect datetime column first
+                dt_col_3d = None
+                for dc in ["Datetime", "datetime", "Date", "date", "Time", "time"]:
+                    for ds in st.session_state.datasets.values():
+                        if dc in ds["df"].columns:
+                            dt_col_3d = dc
+                            break
+                    if dt_col_3d:
+                        break
+
+                if not dt_col_3d:
+                    st.warning("⚠️ No datetime column found — 3D Line requires a time/date axis.")
+                else:
+                    # Let user pick two numeric axes for Y and Z (X = time)
+                    col_y3, col_z3 = st.columns([1, 1])
+                    with col_y3:
+                        y3_axis = st.selectbox("Y-axis (numeric)", num_cols, key="3d_line_y")
+                    with col_z3:
+                        z3_axis = st.selectbox("Z-axis (numeric)", num_cols, key="3d_line_z")
+
+                    # Resampling option
+                    resample_3d = st.selectbox(
+                        "⏱️ Resample to",
+                        ["All (native)", "1min", "2min", "5min", "10min", "15min", "30min", "1h", "2h", "4h", "6h", "12h", "1D"],
+                        index=0,
+                        key="3d_resample",
+                    )
+
+                    selected_3d_line = st.multiselect(
+                        "📂 Select files to overlay",
+                        avail_files_3d,
+                        default=avail_files_3d[:1] if len(avail_files_3d) == 1 else avail_files_3d,
+                        key="3d_line_files"
+                    )
+
+                    if not selected_3d_line:
+                        st.info("Select at least one file.")
+                    else:
+                        fig = go.Figure()
+                        colors = px.colors.qualitative.Plotly + px.colors.qualitative.Dark24
+
+                        for i, fname in enumerate(selected_3d_line):
+                            ds = st.session_state.datasets[fname]
+                            df_p = ds["df"]
+
+                            if dt_col_3d not in df_p.columns:
+                                st.warning(f"`{fname}` has no datetime column — skipped.")
+                                continue
+                            if y3_axis not in df_p.columns or z3_axis not in df_p.columns:
+                                st.warning(f"`{fname}` missing `{y3_axis}` or `{z3_axis}` — skipped.")
+                                continue
+
+                            plot_df = df_p[[dt_col_3d, y3_axis, z3_axis]].dropna()
+                            plot_df = plot_df.sort_values(dt_col_3d)
+
+                            # Resample if requested
+                            if resample_3d != "All (native)":
+                                rule = resample_3d
+                                plot_df = plot_df.set_index(dt_col_3d)[[y3_axis, z3_axis]].resample(rule).mean().dropna().reset_index()
+
+                            x_vals = pd.to_datetime(plot_df[dt_col_3d]).values.astype(np.int64) // 10**6
+                            y_vals = plot_df[y3_axis].values
+                            z_vals = plot_df[z3_axis].values
+
+                            color = colors[i % len(colors)]
+                            fig.add_trace(go.Scatter3d(
+                                x=x_vals.tolist(),
+                                y=y_vals.tolist(),
+                                z=z_vals.tolist(),
+                                mode='lines',
+                                name=fname,
+                                line=dict(color=color, width=2.5),
+                                hovertemplate=(
+                                    f"<b>{fname}</b><br>"
+                                    f"Time: %{{x}}<br>"
+                                    f"{y3_axis}: %{{y:.3f}}<br>"
+                                    f"{z3_axis}: %{{z:.3f}}<extra></extra>"
+                                ),
+                            ))
+
+                        fig.update_layout(
+                            title=dict(text=f"3D Line: {dt_col_3d} × {y3_axis} × {z3_axis}", font_size=16),
+                            template="plotly_white",
+                            height=height_3d,
+                            scene=dict(
+                                xaxis_title=dt_col_3d,
+                                yaxis_title=y3_axis,
+                                zaxis_title=z3_axis,
+                                camera=dict(eye=dict(x=1.2, y=1.5, z=1.0)),
+                            ),
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+                            margin=dict(l=0, r=0, b=0, t=40),
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+
+                        buf = io.StringIO()
+                        fig.write_html(buf)
+                        st.download_button(
+                            "📥 Download HTML",
+                            buf.getvalue(),
+                            f"3d_line_{y3_axis}_{z3_axis}.html",
+                            "text/html",
+                            key="dl_3d_line"
+                        )
 
     st.divider()
 
