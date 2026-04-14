@@ -15,6 +15,8 @@ import numpy as np
 
 from preprocessor import load_turbine_csv
 import plotly.io as pio
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="plotly")
 
 
 # ── LTTB Downsampling (Largest Triangle Three Buckets) ──────
