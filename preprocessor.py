@@ -47,14 +47,27 @@ def load_turbine_csv(filepath, low_memory=False):
 
     # Parse data (rows 5 onward)
     data = raw.iloc[5:, :].copy()
-    data.columns = ["datetime"] + ext_names
-    data["datetime"] = pd.to_datetime(data["datetime"], format="%m/%d/%Y %I:%M:%S %p", errors="coerce")
-    data = data.dropna(subset=["datetime"])
-    data = data.set_index("datetime")
+    try:
+        data.columns = ["datetime"] + ext_names
+        data["datetime"] = pd.to_datetime(data["datetime"], format="%m/%d/%Y %I:%M:%S %p", errors="coerce")
+        data = data.dropna(subset=["datetime"])
+        data = data.set_index("datetime")
 
-    # Convert all sensor columns to float
-    for col in data.columns:
-        data[col] = pd.to_numeric(data[col], errors="coerce")
+        # Convert all sensor columns to float
+        for col in data.columns:
+            data[col] = pd.to_numeric(data[col], errors="coerce")
+
+    except Exception:
+        print(f"Fail to using extended names as columns for {filepath}, falling back to sensor IDs.")
+        data.columns = ["datetime"] + sensor_ids
+        data["datetime"] = pd.to_datetime(data["datetime"], format="%m/%d/%Y %I:%M:%S %p", errors="coerce")
+        data = data.dropna(subset=["datetime"])
+        data = data.set_index("datetime")
+
+        # Convert all sensor columns to float
+        for col in data.columns:
+            data[col] = pd.to_numeric(data[col], errors="coerce")
+
 
     data = data.sort_index()
 
