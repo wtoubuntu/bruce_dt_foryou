@@ -892,7 +892,7 @@ if st.session_state.datasets:
                         fig.add_trace(go.Box(
                             y=vals,
                             name=label,
-                            boxpoints="outliers",
+                            boxpoints="suspectedoutliers",
                             marker=dict(color=px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]),
                             text=[label],
                             hoverinfo="y+name",
@@ -947,11 +947,11 @@ if st.session_state.datasets:
                 st.markdown("**Marker Style**")
                 m_col1, m_col2, m_col3, m_col4 = st.columns([1, 1, 1, 1])
                 with m_col1:
-                    marker_size = st.slider("Marker size", 1, 20, 6, key="3d_marker_size")
+                    marker_size = st.slider("Marker size", 1, 10, 2, key="3d_marker_size")
                 with m_col2:
-                    marker_opacity = st.slider("Opacity", 0.0, 1.0, 0.65, step=0.05, key="3d_marker_opacity")
+                    marker_opacity = st.slider("Opacity", 0.0, 1.0, 0.5, step=0.05, key="3d_marker_opacity")
                 with m_col3:
-                    edge_width = st.slider("Edge width", 0.0, 3.0, 0.5, step=0.1, key="3d_edge_width")
+                    edge_width = st.slider("Edge width", 0.0, 3.0, 0.0, step=0.1, key="3d_edge_width")
                 with m_col4:
                     edge_color = st.color_picker("Edge color", "#000000", key="3d_edge_color")
 
@@ -1053,7 +1053,7 @@ if st.session_state.datasets:
 
                     fig.update_layout(
                         title=dict(text=f"3D Scatter: {x_axis} × {y_axis} × {z_axis}", font_size=16),
-                        template="plotly_white",
+                        template="plotly",
                         height=height_3d,
                         scene=dict(
                             xaxis_title=x_axis,
@@ -1077,6 +1077,13 @@ if st.session_state.datasets:
                     )
 
             else:  # 3D Line / Time Series
+                st.markdown("**Marker Style**")
+                m_col1_time, m_col2_time = st.columns([1, 1])
+                with m_col1_time:
+                    marker_size = st.slider("Marker size", 1, 10, 2, key="3d_marker_size")
+                with m_col2_time:
+                    marker_opacity = st.slider("Opacity", 0.0, 1.0, 0.5, step=0.05, key="3d_marker_opacity")
+
                 # Detect datetime column first
                 dt_col_3d = None
                 for dc in ["Datetime", "datetime", "Date", "date", "Time", "time"]:
@@ -1137,7 +1144,7 @@ if st.session_state.datasets:
                                 rule = resample_3d
                                 plot_df = plot_df.set_index(dt_col_3d)[[y3_axis, z3_axis]].resample(rule).mean().dropna().reset_index()
 
-                            x_vals = pd.to_datetime(plot_df[dt_col_3d]).values.astype(np.int64) // 10**6
+                            x_vals = pd.to_datetime(plot_df[dt_col_3d]) #.values.astype(np.int64) // 10**6
                             y_vals = plot_df[y3_axis].values
                             z_vals = plot_df[z3_axis].values
 
@@ -1146,9 +1153,14 @@ if st.session_state.datasets:
                                 x=x_vals.tolist(),
                                 y=y_vals.tolist(),
                                 z=z_vals.tolist(),
-                                mode='lines',
+                                mode='markers',
                                 name=fname,
-                                line=dict(color=color, width=2.5),
+                                marker=dict(
+                                    color=color,
+                                    size=marker_size,
+                                    opacity=marker_opacity,
+                                ),
+                                # line=dict(color=color, width=2.5),
                                 hovertemplate=(
                                     f"<b>{fname}</b><br>"
                                     f"Time: %{{x}}<br>"
@@ -1159,7 +1171,7 @@ if st.session_state.datasets:
 
                         fig.update_layout(
                             title=dict(text=f"3D Line: {dt_col_3d} × {y3_axis} × {z3_axis}", font_size=16),
-                            template="plotly_white",
+                            template="plotly",
                             height=height_3d,
                             scene=dict(
                                 xaxis_title=dt_col_3d,
