@@ -187,7 +187,11 @@ if uploaded_files:
             st.success(f"✅ Loaded `{uploaded_file.name}` — {df.shape[0]} rows × {df.shape[1]} columns")
         except Exception as e:
             st.error(f"❌ Failed to load `{uploaded_file.name}`: {e}")
-            traceback.print_exc()
+            # 1. Grab the full error message and line numbers as a text string
+            error_details = traceback.format_exc()
+            
+            # 2. Display it directly on your Streamlit web page in a nice code block
+            st.code(error_details, language="python")
 
 # ── Show loaded datasets + clear button ───────────────────────
 if st.session_state.datasets:
