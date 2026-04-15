@@ -47,30 +47,36 @@ def load_turbine_csv(filepath, low_memory=False):
 
     # Parse data (rows 5 onward)
     data = raw.iloc[5:, :].copy()
+
     try:
-        data.columns = ["datetime"] + ext_names
-        data["datetime"] = pd.to_datetime(data["datetime"], format="%m/%d/%Y %I:%M:%S %p", errors="coerce")
-        data = data.dropna(subset=["datetime"])
-        data = data.set_index("datetime")
+        data_ext_names = data.copy()
+        data_ext_names.columns = ["datetime"] + ext_names
+        data_ext_names["datetime"] = pd.to_datetime(data_ext_names["datetime"], format="%m/%d/%Y %I:%M:%S %p", errors="coerce")
+        data_ext_names = data_ext_names.dropna(subset=["datetime"])
+        data_ext_names = data_ext_names.set_index("datetime")
 
         # Convert all sensor columns to float
-        for col in data.columns:
-            data[col] = pd.to_numeric(data[col], errors="coerce")
+        for col in data_ext_names.columns:
+            data_ext_names[col] = pd.to_numeric(data_ext_names[col], errors="coerce")
+        data = data_ext_names
 
     except Exception:
-        print(f"Fail to using extended names as columns for {filepath}, falling back to sensor IDs.")
-        data.columns = ["datetime"] + sensor_ids
-        data["datetime"] = pd.to_datetime(data["datetime"], format="%m/%d/%Y %I:%M:%S %p", errors="coerce")
-        data = data.dropna(subset=["datetime"])
-        data = data.set_index("datetime")
+        print(f"Fail to using extended names as columns, falling back to sensor IDs.")
+        data_sensor_ids = data.copy()
+        data_sensor_ids.columns = ["datetime"] + sensor_ids
+        
+        data_sensor_ids["datetime"] = pd.to_datetime(data_sensor_ids["datetime"], format="%m/%d/%Y %I:%M:%S %p", errors="coerce")
+        data_sensor_ids = data_sensor_ids.dropna(subset=["datetime"])
+        data_sensor_ids = data_sensor_ids.set_index("datetime")
 
         # Convert all sensor columns to float
-        for col in data.columns:
-            data[col] = pd.to_numeric(data[col], errors="coerce")
+        for col in data_sensor_ids.columns:
+            data_sensor_ids[col] = pd.to_numeric(data_sensor_ids[col], errors="coerce")
+        data = data_sensor_ids
 
 
     data = data.sort_index()
-
+    print(data.head())
     return data, metadata
 
 

@@ -171,7 +171,17 @@ if uploaded_files:
                     df = data.reset_index().rename(columns={"datetime": "Datetime"})
                     file_type = "turbine"
                 else:
-                    df = pd.read_csv(uploaded_file)
+                    import io as io_module
+                    text_io = io_module.StringIO(uploaded_file.getvalue().decode("utf-8"))
+                    df = pd.read_csv(text_io)
+                    df["date_time"] = pd.to_datetime(df["date_time"], format="%m/%d/%Y %I:%M:%S %p", errors="coerce")
+                    df = df.dropna(subset=["date_time"])
+                    df = df.set_index("date_time")
+
+                    # Convert all sensor columns to float
+                    for col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors="coerce")
+                    df = df.reset_index().rename(columns={"date_time": "Datetime"})
                     metadata = None
                     file_type = "standard"
             else:
@@ -898,7 +908,8 @@ if st.session_state.datasets:
                         fig.add_trace(go.Box(
                             y=vals,
                             name=label,
-                            boxpoints="suspectedoutliers",
+                            width=0.8,
+                            boxpoints= "outliers", # "all', "outliers", "suspectedoutliers", or False
                             marker=dict(color=px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]),
                             text=[label],
                             hoverinfo="y+name",
