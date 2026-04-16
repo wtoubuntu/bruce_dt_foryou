@@ -37,7 +37,8 @@ def lttb_downsample(x, y, n_target):
     # ── Robust numeric conversion for x ─────────────────────
     x_dtype = getattr(x, "dtype", None)
     if x_dtype is not None and np.issubdtype(x_dtype, np.datetime64):
-        x_num = np.asarray(x, dtype=np.int64).ravel().astype(float)
+        # Scale to milliseconds to prevent exact precision loss
+        x_num = (np.asarray(x, dtype=np.int64).ravel() / 1_000_000.0).astype(float)
     else:
         x_num = np.asarray(x, dtype=float).ravel()
 
@@ -161,33 +162,48 @@ if uploaded_files:
 
         try:
             if uploaded_file.name.endswith(".csv"):
+                uploaded_file.seek(0)
                 raw_check = pd.read_csv(uploaded_file, header=None, nrows=1)
                 first_val = str(raw_check.iloc[0, 0]) if raw_check.shape[0] > 0 else ""
+                uploaded_file.seek(0)
 
                 if first_val == "Point Name":
-                    import io as io_module
-                    text_io = io_module.StringIO(uploaded_file.getvalue().decode("utf-8"))
-                    data, metadata = load_turbine_csv(text_io)
+                    data, metadata = load_turbine_csv(uploaded_file)
                     df = data.reset_index().rename(columns={"datetime": "Datetime"})
                     file_type = "turbine"
                 else:
-                    import io as io_module
-                    text_io = io_module.StringIO(uploaded_file.getvalue().decode("utf-8"))
-                    df = pd.read_csv(text_io)
-                    df["date_time"] = pd.to_datetime(df["date_time"], format="%m/%d/%Y %I:%M:%S %p", errors="coerce")
-                    df = df.dropna(subset=["date_time"])
-                    df = df.set_index("date_time")
-
-                    # Convert all sensor columns to float
-                    for col in df.columns:
-                        df[col] = pd.to_numeric(df[col], errors="coerce")
-                    df = df.reset_index().rename(columns={"date_time": "Datetime"})
-                    metadata = None
+                    df = pd.read_csv(uploaded_file)
                     file_type = "standard"
             else:
                 df = pd.read_excel(uploaded_file)
-                metadata = None
                 file_type = "excel"
+                
+            if file_type in ["standard", "excel"]:
+                # Auto-detect date/time column
+                dt_candidates = ["date_time", "datetime", "date", "time", "timestamp", "date/time", "t"]
+                dt_col = None
+                for col in df.columns:
+                    if str(col).lower().strip() in dt_candidates:
+                        dt_col = col
+                        break
+                        
+                # Fallback to first column if no match found
+                if dt_col is None and len(df.columns) > 0:
+                    dt_col = df.columns[0]
+                    
+                if dt_col in df.columns:
+                    df[dt_col] = pd.to_datetime(df[dt_col], errors="coerce")
+                    df = df.dropna(subset=[dt_col])
+                    df = df.set_index(dt_col)
+
+                # Convert all remaining columns to float
+                for col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors="coerce")
+                
+                if dt_col is not None:
+                    df = df.reset_index().rename(columns={dt_col: "Datetime"})
+                    
+                metadata = None
 
             st.session_state.datasets[uploaded_file.name] = {
                 "df": df,
@@ -283,11 +299,11 @@ if st.session_state.datasets:
         tab_stat, tab_head = st.tabs(["📊 Statistics", "🔍 Data Preview"])
         with tab_stat:
             if len(num_cols) > 0:
-                st.dataframe(df[num_cols].describe(), width='stretch')
+                st.dataframe(df[num_cols].describe(), use_container_width=True)
             else:
                 st.info("No numeric columns found for statistics.")
         with tab_head:
-            st.dataframe(df.head(10), width='stretch')
+            st.dataframe(df.head(10), use_container_width=True)
     else:
         # Multi-dataset — show comparison
         tab_stat, tab_head = st.tabs(["📊 Statistics", "🔍 Data Preview"])
@@ -296,11 +312,11 @@ if st.session_state.datasets:
             ds = st.session_state.datasets[sel]
             df = ds["df"]
             if len(num_cols) > 0:
-                st.dataframe(df[num_cols].describe(), width='stretch')
+                st.dataframe(df[num_cols].describe(), use_container_width=True)
             else:
                 st.info("No numeric columns found for statistics.")
         with tab_head:
-            st.dataframe(df.head(10), width='stretch')
+            st.dataframe(df.head(10), use_container_width=True)
 
     st.divider()
 
@@ -442,7 +458,7 @@ if st.session_state.datasets:
                     ),
                     hovermode="x unified",
                 )
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
 
                 buf = io.StringIO()
                 fig.write_html(buf)
@@ -582,7 +598,7 @@ if st.session_state.datasets:
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
                     hovermode="closest",
                 )
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
 
                 buf = io.StringIO()
                 fig.write_html(buf)
@@ -645,7 +661,7 @@ if st.session_state.datasets:
                     barmode="overlay",
                     bargap=0.05,
                 )
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
             else:
                 sel = st.selectbox("Select dataset", list(st.session_state.datasets.keys()), key="hist_ds")
                 ds = st.session_state.datasets[sel]
@@ -658,7 +674,7 @@ if st.session_state.datasets:
                         color_discrete_sequence=["#1E3A5F"]
                     )
                     fig.update_layout(template="plotly_white", bargap=0.1)
-                    st.plotly_chart(fig, width='stretch')
+                    st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.warning(f"`{sel}` does not have column `{hist_col}`")
 
@@ -693,7 +709,7 @@ if st.session_state.datasets:
                     barmode="overlay",
                     bargap=0.05,
                 )
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
             else:
                 st.info("Select at least one file.")
 
@@ -726,7 +742,7 @@ if st.session_state.datasets:
                         color_discrete_sequence=px.colors.qualitative.Plotly
                     )
                     fig.update_layout(template="plotly_white", showlegend=False)
-                    st.plotly_chart(fig, width='stretch')
+                    st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.warning("No data to plot.")
             else:
@@ -748,7 +764,7 @@ if st.session_state.datasets:
                     color_discrete_sequence=px.colors.qualitative.Set2
                 )
                 fig.update_layout(template="plotly_white", showlegend=False)
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
             else:
                 st.warning(f"Selected dataset missing columns.")
 
@@ -785,7 +801,7 @@ if st.session_state.datasets:
                     yaxis=dict(showticklabels=False, title=""),
                     hovermode="closest",
                 )
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
             else:
                 st.info("Select at least one file.")
 
@@ -805,7 +821,7 @@ if st.session_state.datasets:
                     color_continuous_scale="Blues"
                 )
                 fig.update_layout(template="plotly_white", xaxis_title=bar_col, yaxis_title="Count", showlegend=False)
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
             else:
                 st.warning(f"`{sel}` missing column `{bar_col}`")
 
@@ -825,7 +841,7 @@ if st.session_state.datasets:
                     aspect="auto"
                 )
                 fig.update_layout(template="plotly_white")
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
 
                 buf = io.StringIO()
                 fig.write_html(buf)
@@ -924,7 +940,7 @@ if st.session_state.datasets:
                         showlegend=False,
                         boxmode="group",
                     )
-                    st.plotly_chart(fig, width='stretch')
+                    st.plotly_chart(fig, use_container_width=True)
 
                     buf = io.StringIO()
                     fig.write_html(buf)
@@ -1030,9 +1046,15 @@ if st.session_state.datasets:
                         # Downsample with LTTB if multiplier is set
                         if mult_val > 0:
                             n_target = max(3, len(plot_df) // mult_val)
-                            x_raw = plot_df[x_axis].values.astype(float)
-                            y_raw = plot_df[y_axis].values.astype(float)
-                            z_raw = plot_df[z_axis].values.astype(float)
+                            
+                            def safe_to_float(serie):
+                                if pd.api.types.is_datetime64_any_dtype(serie):
+                                    return serie.values.astype(np.int64) / 1_000_000.0
+                                return serie.values.astype(float)
+                                
+                            x_raw = safe_to_float(plot_df[x_axis])
+                            y_raw = safe_to_float(plot_df[y_axis])
+                            z_raw = safe_to_float(plot_df[z_axis])
                             idx_s, _ = lttb_downsample(
                                 np.arange(len(x_raw), dtype=float),
                                 x_raw,
@@ -1081,7 +1103,7 @@ if st.session_state.datasets:
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
                         margin=dict(l=0, r=0, b=0, t=40),
                     )
-                    st.plotly_chart(fig, width='stretch')
+                    st.plotly_chart(fig, use_container_width=True)
 
                     buf = io.StringIO()
                     fig.write_html(buf)
@@ -1199,7 +1221,7 @@ if st.session_state.datasets:
                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
                             margin=dict(l=0, r=0, b=0, t=40),
                         )
-                        st.plotly_chart(fig, width='stretch')
+                        st.plotly_chart(fig, use_container_width=True)
 
                         buf = io.StringIO()
                         fig.write_html(buf)

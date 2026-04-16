@@ -65,7 +65,7 @@ def load_turbine_csv(filepath, low_memory=False):
         data_sensor_ids = data.copy()
         data_sensor_ids.columns = ["datetime"] + sensor_ids
         
-        data_sensor_ids["datetime"] = pd.to_datetime(data_sensor_ids["datetime"], format="%m/%d/%Y %I:%M:%S %p", errors="coerce")
+        data_sensor_ids["datetime"] = pd.to_datetime(data_sensor_ids["datetime"], errors="coerce")
         data_sensor_ids = data_sensor_ids.dropna(subset=["datetime"])
         data_sensor_ids = data_sensor_ids.set_index("datetime")
 
@@ -76,7 +76,7 @@ def load_turbine_csv(filepath, low_memory=False):
 
 
     data = data.sort_index()
-    print(data.head())
+    # print(data.head())
     return data, metadata
 
 
