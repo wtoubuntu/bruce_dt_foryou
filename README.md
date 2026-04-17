@@ -6,7 +6,7 @@ Bruce's Data Viz Tool is a powerful, interactive Streamlit web application desig
 
 - **Multi-File Upload Settings**: Easily upload multiple CSV or Excel files (`.csv`, `.xlsx`, `.xls`) to compare them directly against each other.
 - **Smart Data Parsing**: Automatically detects common datetime columns and correctly parses them.
-- **Support for Turbine Sensor Data**: Natively handles specialized turbine sensor CSV formats alongside standard CSV formats.
+- **Support Data**: Natively handles CSV formats.
 - **Advanced Downsampling**: Integrates the LTTB (Largest Triangle Three Buckets) downsampling algorithm to securely and cleanly visualize massive native datasets without crashing the browser or losing visual shape integrity.
 - **Interactive Visualizations**:
   - **📈 Time Series**: Compare multiple files on the same time series graph. Includes resample controls, custom range bars, and interactive zooming.
