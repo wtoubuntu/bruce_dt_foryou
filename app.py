@@ -325,21 +325,28 @@ if st.session_state.datasets:
     # ══════════════════════════════════════════════════════════
     st.subheader("🎨 Visualizations")
 
-    viz_tab1, viz_tab2, viz_tab3, viz_tab4 = st.tabs(
-        ["📈 Time Series", "📊 Scatter Plot", "📊 Statistics", "🌐 3D Visualization"]
+    available_files = list(st.session_state.datasets.keys())
+
+    active_tab = st.radio(
+        "Navigation",
+        ["📈 Time Series", "📊 Scatter Plot", "📊 Statistics", "🌐 3D Visualization"],
+        horizontal=True,
+        label_visibility="collapsed",
+        key="viz_active_tab"
     )
 
     # ── Time Series ──────────────────────────────────────────
-    with viz_tab1:
+    if active_tab == "📈 Time Series":
         st.markdown("**Compare multiple files on the same time series graph**")
 
         if len(num_cols) == 0 or len(date_cols) == 0:
             st.warning("⚠️ Need at least one date column and one numeric column.")
         else:
             # Y-axis sensor/column selector
-            y_col = st.selectbox(
-                "Y-axis (sensor / value to plot)",
+            y_cols = st.multiselect(
+                "Y-axis (sensors / values to plot)",
                 num_cols,
+                default=[num_cols[0]] if num_cols else None,
                 key="ts_y_multi"
             )
 
@@ -358,7 +365,6 @@ if st.session_state.datasets:
                 )
 
             # File selector for overlay
-            available_files = list(st.session_state.datasets.keys())
             selected_files = st.multiselect(
                 "📂 Select files to overlay",
                 available_files,
@@ -376,79 +382,92 @@ if st.session_state.datasets:
                 colors = px.colors.qualitative.Plotly + px.colors.qualitative.Dark24
                 range_bar_shapes = []
 
+                dt_col_last = "Datetime"
                 for i, fname in enumerate(selected_files):
                     ds = st.session_state.datasets[fname]
                     df_plot = ds["df"]
 
-                    if y_col not in df_plot.columns:
-                        st.warning(f"`{fname}` does not have column `{y_col}` — skipped.")
-                        continue
                     if "Datetime" not in df_plot.columns and "datetime" not in df_plot.columns:
                         st.warning(f"`{fname}` has no datetime column — skipped.")
                         continue
 
                     dt_col = "Datetime" if "Datetime" in df_plot.columns else "datetime"
-                    color = colors[i % len(colors)]
+                    dt_col_last = dt_col
 
-                    # Prepare data
-                    plot_df = df_plot[[dt_col, y_col]].dropna()
-                    plot_df = plot_df.sort_values(dt_col)
+                    for j, y_col in enumerate(y_cols):
+                        if y_col not in df_plot.columns:
+                            st.warning(f"`{fname}` does not have column `{y_col}` — skipped.")
+                            continue
 
-                    # Resample by time interval if selected
-                    if resample_rule != "All (native)":
-                        rule = resample_rule
-                        agg_df = plot_df.set_index(dt_col)[y_col].resample(rule).mean().dropna().reset_index()
-                        x_vals = agg_df[dt_col].astype(str)
-                        y_vals = agg_df[y_col]
-                    else:
-                        # LTTB downsample only for very large native datasets
-                        if len(plot_df) > 5000:
-                            x_raw = plot_df[dt_col].values
-                            y_raw = plot_df[y_col].values.astype(float)
-                            x_ds, y_ds = lttb_downsample(x_raw, y_raw, 5000)
-                            x_vals = x_ds.astype(str)
-                            y_vals = y_ds
+                        # Combine colors based on file and column
+                        color_idx = (i * len(y_cols) + j) % len(colors)
+                        color = colors[color_idx]
+                        
+                        trace_name = f"{fname} - {y_col}" if len(y_cols) > 1 or len(selected_files) > 1 else fname
+
+                        # Prepare data
+                        plot_df = df_plot[[dt_col, y_col]].dropna()
+                        plot_df = plot_df.sort_values(dt_col)
+
+                        # Resample by time interval if selected
+                        if resample_rule != "All (native)":
+                            rule = resample_rule
+                            agg_df = plot_df.set_index(dt_col)[y_col].resample(rule).mean().dropna().reset_index()
+                            x_vals = agg_df[dt_col].astype(str)
+                            y_vals = agg_df[y_col]
                         else:
-                            x_vals = plot_df[dt_col].astype(str)
-                            y_vals = plot_df[y_col]
+                            # LTTB downsample only for very large native datasets
+                            if len(plot_df) > 5000:
+                                x_raw = plot_df[dt_col].values
+                                y_raw = plot_df[y_col].values.astype(float)
+                                x_ds, y_ds = lttb_downsample(x_raw, y_raw, 5000)
+                                x_vals = x_ds.astype(str)
+                                y_vals = y_ds
+                            else:
+                                x_vals = plot_df[dt_col].astype(str)
+                                y_vals = plot_df[y_col]
 
-                    # Add range bar if requested
-                    if show_rangebars:
-                        # Show ±5% of y range as a semi-transparent band
-                        y_mid = y_vals.mean()
-                        y_std = y_vals.std()
-                        y_lo = y_mid - 2 * y_std
-                        y_hi = y_mid + 2 * y_std
+                        # Add range bar if requested
+                        if show_rangebars:
+                            # Show ±5% of y range as a semi-transparent band
+                            y_mid = y_vals.mean()
+                            y_std = y_vals.std()
+                            y_lo = y_mid - 2 * y_std
+                            y_hi = y_mid + 2 * y_std
+                            fig.add_trace(go.Scatter(
+                                x=x_vals.tolist() + x_vals.tolist()[::-1],
+                                y=y_lo + [y_hi] * len(y_vals) + ([y_lo] if len(y_vals) else []),
+                                fill='toself',
+                                fillcolor=f'rgba{tuple(list(px.colors.hex_to_rgb(color)) + [0.1])}',
+                                line=dict(color='rgba(0,0,0,0)'),
+                                name=f'{trace_name} ±2σ',
+                                showlegend=True,
+                                hoverinfo='skip',
+                            ))
+
                         fig.add_trace(go.Scatter(
-                            x=x_vals.tolist() + x_vals.tolist()[::-1],
-                            y=y_lo + [y_hi] * len(y_vals) + ([y_lo] if len(y_vals) else []),
-                            fill='toself',
-                            fillcolor=f'rgba{tuple(list(px.colors.hex_to_rgb(color)) + [0.1])}',
-                            line=dict(color='rgba(0,0,0,0)'),
-                            name=f'{fname} ±2σ',
-                            showlegend=True,
-                            hoverinfo='skip',
+                            x=x_vals.tolist(),
+                            y=y_vals.tolist(),
+                            mode='lines',
+                            name=trace_name,
+                            line=dict(color=color, width=1.5),
+                            hovertemplate=f"<b>{fname}</b><br>{y_col}: %{{y}}<br>{dt_col}: %{{x}}<extra></extra>",
                         ))
 
-                    fig.add_trace(go.Scatter(
-                        x=x_vals.tolist(),
-                        y=y_vals.tolist(),
-                        mode='lines',
-                        name=fname,
-                        line=dict(color=color, width=1.5),
-                        hovertemplate=f"<b>{fname}</b><br>{y_col}: %{{y}}<br>{dt_col}: %{{x}}<extra></extra>",
-                    ))
+                title_text = "Comparison" if len(y_cols) != 1 else f"{y_cols[0]} — Comparison"
+                yaxis_title = "Value" if len(y_cols) != 1 else y_cols[0]
+                dl_filename = "multi_timeseries_comparison.html" if len(y_cols) != 1 else f"{y_cols[0]}_timeseries_comparison.html"
 
                 fig.update_layout(
-                    title=dict(text=f"{y_col} — Comparison", font_size=18),
+                    title=dict(text=title_text, font_size=18),
                     template="plotly_white",
                     height=height,
                     xaxis=dict(
                         rangeslider=dict(visible=True),
                         type="date",
-                        title=dt_col
+                        title=dt_col_last
                     ),
-                    yaxis=dict(title=y_col),
+                    yaxis=dict(title=yaxis_title),
                     legend=dict(
                         orientation="h",
                         yanchor="bottom",
@@ -460,18 +479,20 @@ if st.session_state.datasets:
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
+                # Remove fixed height/width before export to ensure fullscreen in browser
+                fig.update_layout(height=None, width=None)
                 buf = io.StringIO()
-                fig.write_html(buf)
+                fig.write_html(buf, default_width='100%', default_height='100%')
                 st.download_button(
                     "📥 Download HTML",
                     buf.getvalue(),
-                    f"{y_col}_timeseries_comparison.html",
+                    dl_filename,
                     "text/html",
                     key="dl_ts_multi"
                 )
 
     # ── Scatter Plot ─────────────────────────────────────────
-    with viz_tab2:
+    if active_tab == "📊 Scatter Plot":
         st.markdown("**Compare relationships across multiple files**")
 
         if len(num_cols) < 2:
@@ -600,8 +621,9 @@ if st.session_state.datasets:
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
+                fig.update_layout(height=None, width=None)
                 buf = io.StringIO()
-                fig.write_html(buf)
+                fig.write_html(buf, default_width='100%', default_height='100%')
                 st.download_button(
                     "📥 Download HTML",
                     buf.getvalue(),
@@ -611,7 +633,7 @@ if st.session_state.datasets:
                 )
 
     # ── Statistics Plots ────────────────────────────────────
-    with viz_tab3:
+    if active_tab == "📊 Statistics":
         st.markdown("**Distribution & statistical visualizations**")
 
         stat_type = st.selectbox(
@@ -843,8 +865,9 @@ if st.session_state.datasets:
                 fig.update_layout(template="plotly_white")
                 st.plotly_chart(fig, use_container_width=True)
 
+                fig.update_layout(height=None, width=None)
                 buf = io.StringIO()
-                fig.write_html(buf)
+                fig.write_html(buf, default_width='100%', default_height='100%')
                 st.download_button(
                     "📥 Download HTML",
                     buf.getvalue(),
@@ -924,9 +947,10 @@ if st.session_state.datasets:
                         fig.add_trace(go.Box(
                             y=vals,
                             name=label,
-                            width=0.8,
+                            width=0.5,
                             boxpoints= "outliers", # "all', "outliers", "suspectedoutliers", or False
-                            marker=dict(color=px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]),
+                            # marker=dict(color=px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]),
+                            marker_color='royalblue',
                             text=[label],
                             hoverinfo="y+name",
                         ))
@@ -942,8 +966,9 @@ if st.session_state.datasets:
                     )
                     st.plotly_chart(fig, use_container_width=True)
 
+                    fig.update_layout(height=None, width=None)
                     buf = io.StringIO()
-                    fig.write_html(buf)
+                    fig.write_html(buf, default_width='100%', default_height='100%')
                     st.download_button(
                         "📥 Download HTML",
                         buf.getvalue(),
@@ -957,7 +982,7 @@ if st.session_state.datasets:
     # ══════════════════════════════════════════════════════════
     # 3D VISUALIZATION
     # ══════════════════════════════════════════════════════════
-    with viz_tab4:
+    if active_tab == "🌐 3D Visualization":
         st.markdown("**3D scatter & line plots — explore relationships across three dimensions**")
 
         if len(num_cols) < 2:
@@ -1006,7 +1031,8 @@ if st.session_state.datasets:
                 )
 
                 # Downsample by multiplier — e.g. "2×" means halve the rows, "5×" means keep 1/5
-                row_count = len(plot_df)
+                ref_fname = avail_files_3d[0] if avail_files_3d else None
+                row_count = len(st.session_state.datasets[ref_fname]["df"]) if ref_fname else 0
                 multiplier_labels = []
                 for m in [2, 3, 5, 10, 20, 50]:
                     result_rows = row_count // m
@@ -1105,8 +1131,9 @@ if st.session_state.datasets:
                     )
                     st.plotly_chart(fig, use_container_width=True)
 
+                    fig.update_layout(height=None, width=None)
                     buf = io.StringIO()
-                    fig.write_html(buf)
+                    fig.write_html(buf, default_width='100%', default_height='100%')
                     st.download_button(
                         "📥 Download HTML",
                         buf.getvalue(),
@@ -1223,8 +1250,9 @@ if st.session_state.datasets:
                         )
                         st.plotly_chart(fig, use_container_width=True)
 
+                        fig.update_layout(height=None, width=None)
                         buf = io.StringIO()
-                        fig.write_html(buf)
+                        fig.write_html(buf, default_width='100%', default_height='100%')
                         st.download_button(
                             "📥 Download HTML",
                             buf.getvalue(),
