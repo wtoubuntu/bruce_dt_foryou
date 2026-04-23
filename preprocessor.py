@@ -17,7 +17,7 @@ from datetime import datetime
 RAW_DIR = Path("raw")
 
 
-def load_turbine_csv(filepath, low_memory=False):
+def load_apa_csv(filepath, low_memory=False):
     """
     Load a turbine sensor CSV with metadata header rows.
     Accepts a file path (str/Path) or a file-like object (e.g. StringIO).

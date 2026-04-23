@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import traceback
 
-from preprocessor import load_turbine_csv
+from preprocessor import load_apa_csv
 import plotly.io as pio
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="plotly")
@@ -176,7 +176,7 @@ if uploaded_files:
                 uploaded_file.seek(0)
 
                 if first_val == "Point Name":
-                    data, metadata = load_turbine_csv(uploaded_file)
+                    data, metadata = load_apa_csv(uploaded_file)
                     df = data.reset_index().rename(columns={"datetime": "Datetime"})
                     file_type = "turbine"
                 else:
