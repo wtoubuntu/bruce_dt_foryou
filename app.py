@@ -89,6 +89,11 @@ def lttb_downsample(x, y, n_target):
 # Use browser renderer (Chrome) for interactive WebGL plots
 pio.renderers.default = "browser"
 
+# ── Helper function for display names ────────────────────
+def get_display_name(key):
+    """Return the display name for a dataset key."""
+    return st.session_state.datasets[key]["display_name"]
+
 st.set_page_config(
     page_title="Bruce's Data Viz Tool",
     page_icon="📊",
@@ -157,8 +162,11 @@ if "resample_rule" not in st.session_state:
 
 if uploaded_files:
     for uploaded_file in uploaded_files:
-        if uploaded_file.name in st.session_state.datasets:
-            continue  # already loaded
+        # 1. Use Streamlit's built-in unique ID (O(1) time, no hashing required)
+        unique_key = uploaded_file.file_id
+
+        if unique_key in st.session_state.datasets:
+            continue  # Exact file instance is already loaded
 
         try:
             if uploaded_file.name.endswith(".csv"):
@@ -205,12 +213,24 @@ if uploaded_files:
                     
                 metadata = None
 
-            st.session_state.datasets[uploaded_file.name] = {
+            # 2. Generate a clean display name with a suffix if necessary
+            base_name = uploaded_file.name
+            display_name = base_name
+            counter = 1
+            
+            # Check if this exact display name already exists in our dictionary
+            while any(ds["display_name"] == display_name for ds in st.session_state.datasets.values()):
+                display_name = f"{base_name} ({counter})"
+                counter += 1
+
+            # 3. Store the data using the unique ID as the key, but save the display name
+            st.session_state.datasets[unique_key] = {
+                "display_name": display_name,
                 "df": df,
                 "metadata": metadata,
                 "type": file_type,
             }
-            st.success(f"✅ Loaded `{uploaded_file.name}` — {df.shape[0]} rows × {df.shape[1]} columns")
+            st.success(f"✅ Loaded `{display_name}` — {df.shape[0]} rows × {df.shape[1]} columns")
         except Exception as e:
             st.error(f"❌ Failed to load `{uploaded_file.name}`: {e}")
             # 1. Grab the full error message and line numbers as a text string
@@ -224,9 +244,10 @@ if st.session_state.datasets:
     col = st.columns([1, 1, 1, 1, 1])
     with col[0]:
         st.markdown("**📂 Loaded datasets:**")
-    for i, fname in enumerate(list(st.session_state.datasets.keys())):
+    for i, key in enumerate(list(st.session_state.datasets.keys())):
+        display_name = st.session_state.datasets[key]["display_name"]
         with col[(i % 5) + 1]:
-            st.caption(f"• {fname}")
+            st.caption(f"• {display_name}")
     with col[min(len(st.session_state.datasets), 4) + 1]:
         if st.button("🗑️ Clear all"):
             st.session_state.datasets = {}
@@ -273,8 +294,9 @@ if st.session_state.datasets:
         st.metric("Date cols", len(date_cols))
 
         st.subheader("📂 Dataset Details")
-        for fname, ds in st.session_state.datasets.items():
-            with st.expander(f"📄 {fname}"):
+        for key, ds in st.session_state.datasets.items():
+            display_name = ds["display_name"]
+            with st.expander(f"📄 {display_name}"):
                 df_sn = ds["df"]
                 st.write(f"Rows: {df_sn.shape[0]} · Cols: {df_sn.shape[1]}")
                 if "Datetime" in df_sn.columns or "datetime" in df_sn.columns:
@@ -308,7 +330,7 @@ if st.session_state.datasets:
         # Multi-dataset — show comparison
         tab_stat, tab_head = st.tabs(["📊 Statistics", "🔍 Data Preview"])
         with tab_stat:
-            sel = st.selectbox("Select dataset for stats", list(st.session_state.datasets.keys()), key="stats_dataset")
+            sel = st.selectbox("Select dataset for stats", list(st.session_state.datasets.keys()), key="stats_dataset", format_func=get_display_name)
             ds = st.session_state.datasets[sel]
             df = ds["df"]
             if len(num_cols) > 0:
@@ -354,7 +376,7 @@ if st.session_state.datasets:
             with col1:
                 height = st.slider("Chart height (px)", 300, 800, 450, key="ts_h_multi")
             with col2:
-                show_rangebars = st.checkbox("Show range bars", value=False, key="ts_rangebars")
+                show_rangebars = st.checkbox("Show range bars (±2σ)", value=False, key="ts_rangebars")
             with col3:
                 resample_rule = st.selectbox(
                     "⏱️ Resample to",
@@ -369,7 +391,8 @@ if st.session_state.datasets:
                 "📂 Select files to overlay",
                 available_files,
                 default=available_files[:1] if len(available_files) == 1 else available_files,
-                key="ts_files"
+                key="ts_files",
+                format_func=get_display_name
             )
 
             if not selected_files:
@@ -403,7 +426,9 @@ if st.session_state.datasets:
                         color_idx = (i * len(y_cols) + j) % len(colors)
                         color = colors[color_idx]
                         
-                        trace_name = f"{fname} - {y_col}" if len(y_cols) > 1 or len(selected_files) > 1 else fname
+                        # Use display_name for user-facing labels
+                        display_name_str = st.session_state.datasets[fname]["display_name"]
+                        trace_name = f"{display_name_str} - {y_col}" if len(y_cols) > 1 or len(selected_files) > 1 else display_name_str
 
                         # Prepare data
                         plot_df = df_plot[[dt_col, y_col]].dropna()
@@ -436,7 +461,7 @@ if st.session_state.datasets:
                             y_hi = y_mid + 2 * y_std
                             fig.add_trace(go.Scatter(
                                 x=x_vals.tolist() + x_vals.tolist()[::-1],
-                                y=y_lo + [y_hi] * len(y_vals) + ([y_lo] if len(y_vals) else []),
+                                y=[y_lo] * len(y_vals) + [y_hi] * len(y_vals) + ([y_lo] if len(y_vals) else []),
                                 fill='toself',
                                 fillcolor=f'rgba{tuple(list(px.colors.hex_to_rgb(color)) + [0.1])}',
                                 line=dict(color='rgba(0,0,0,0)'),
@@ -451,7 +476,7 @@ if st.session_state.datasets:
                             mode='lines',
                             name=trace_name,
                             line=dict(color=color, width=1.5),
-                            hovertemplate=f"<b>{fname}</b><br>{y_col}: %{{y}}<br>{dt_col}: %{{x}}<extra></extra>",
+                            hovertemplate=f"<b>{st.session_state.datasets[fname]['display_name']}</b><br>{y_col}: %{{y}}<br>{dt_col}: %{{x}}<extra></extra>",
                         ))
 
                 title_text = "Comparison" if len(y_cols) != 1 else f"{y_cols[0]} — Comparison"
@@ -463,7 +488,7 @@ if st.session_state.datasets:
                     template="plotly_white",
                     height=height,
                     xaxis=dict(
-                        rangeslider=dict(visible=True),
+                        rangeslider=dict(visible=False),
                         type="date",
                         title=dt_col_last
                     ),
@@ -531,7 +556,8 @@ if st.session_state.datasets:
                 "📂 Select files to overlay",
                 available_files,
                 default=available_files[:1] if len(available_files) == 1 else available_files,
-                key="sc_files"
+                key="sc_files",
+                format_func=get_display_name
             )
 
             if not selected_files_sc:
@@ -579,14 +605,17 @@ if st.session_state.datasets:
                         y_vals = plot_df[sc_y].values
 
                     color = colors[i % len(colors)]
+                    
+                    # Use display_name for user-facing labels
+                    display_name_str = st.session_state.datasets[fname]["display_name"]
 
                     fig.add_trace(go.Scatter(
                         x=x_vals.tolist(),
                         y=y_vals.tolist(),
                         mode='markers',
-                        name=fname,
+                        name=display_name_str,
                         marker=dict(color=color, size=6, opacity=0.6),
-                        hovertemplate=f"<b>{fname}</b><br>{sc_x}: %{{x}}<br>{sc_y}: %{{y}}<extra></extra>",
+                        hovertemplate=f"<b>{display_name_str}</b><br>{sc_x}: %{{x}}<br>{sc_y}: %{{y}}<extra></extra>",
                     ))
 
                     # Regression line per file
@@ -604,7 +633,7 @@ if st.session_state.datasets:
                                 x=x_range,
                                 y=[slope * x_range[0] + intercept, slope * x_range[1] + intercept],
                                 mode='lines',
-                                name=f"{fname} trend",
+                                name=f"{display_name_str} trend",
                                 line=dict(color=color, width=2, dash='dot'),
                                 showlegend=True,
                                 hoverinfo='skip',
@@ -669,10 +698,11 @@ if st.session_state.datasets:
                     if not ds or hist_col not in ds["df"].columns:
                         continue
                     plot_df = ds["df"][[hist_col]].dropna()
+                    display_name_str = ds["display_name"]
                     fig.add_trace(go.Histogram(
                         x=plot_df[hist_col],
                         nbinsx=bins,
-                        name=fname,
+                        name=display_name_str,
                         marker_color=colors[i % len(colors)],
                         opacity=0.6,
                     ))
@@ -685,13 +715,14 @@ if st.session_state.datasets:
                 )
                 st.plotly_chart(fig, use_container_width=True)
             else:
-                sel = st.selectbox("Select dataset", list(st.session_state.datasets.keys()), key="hist_ds")
+                sel = st.selectbox("Select dataset", list(st.session_state.datasets.keys()), key="hist_ds", format_func=get_display_name)
                 ds = st.session_state.datasets[sel]
                 if hist_col in ds["df"].columns:
                     plot_df = ds["df"][[hist_col]].dropna()
+                    display_name_str = ds["display_name"]
                     fig = px.histogram(
                         plot_df, x=hist_col, nbins=bins,
-                        title=f"Distribution of {hist_col} ({sel})",
+                        title=f"Distribution of {hist_col} ({display_name_str})",
                         height=height,
                         color_discrete_sequence=["#1E3A5F"]
                     )
@@ -705,7 +736,7 @@ if st.session_state.datasets:
             hist_col = st.selectbox("Select column", num_cols, key="hist_col_overlay")
             bins = st.slider("Number of bins", 5, 100, 30, key="hist_bins_overlay2")
             avail = list(st.session_state.datasets.keys())
-            sel_files = st.multiselect("Select files", avail, default=avail, key="hist_files")
+            sel_files = st.multiselect("Select files", avail, default=avail, key="hist_files", format_func=get_display_name)
             normalize = st.checkbox("Normalize (density mode)", value=True, key="hist_norm")
 
             if sel_files:
@@ -716,10 +747,11 @@ if st.session_state.datasets:
                     if hist_col not in ds["df"].columns:
                         continue
                     plot_df = ds["df"][[hist_col]].dropna()
+                    display_name_str = ds["display_name"]
                     fig.add_trace(go.Histogram(
                         x=plot_df[hist_col],
                         nbinsx=bins,
-                        name=fname,
+                        name=display_name_str,
                         marker_color=colors[i % len(colors)],
                         opacity=0.6,
                         histnorm="density" if normalize else "",
@@ -739,7 +771,7 @@ if st.session_state.datasets:
         elif stat_type == "📦 Box Plot (by File)":
             val_col = st.selectbox("Value column (numeric)", num_cols, key="box_val_multi")
             avail = list(st.session_state.datasets.keys())
-            sel_files = st.multiselect("Select files", avail, default=avail, key="box_files")
+            sel_files = st.multiselect("Select files", avail, default=avail, key="box_files", format_func=get_display_name)
 
             if sel_files and val_col:
                 fig = go.Figure()
@@ -751,7 +783,8 @@ if st.session_state.datasets:
                     if val_col not in ds["df"].columns:
                         continue
                     vals = ds["df"][val_col].dropna().tolist()
-                    all_labels.extend([fname] * len(vals))
+                    display_name_str = ds["display_name"]
+                    all_labels.extend([display_name_str] * len(vals))
                     all_vals.extend(vals)
 
                 if all_vals:
@@ -775,12 +808,13 @@ if st.session_state.datasets:
             cat_col = st.selectbox("Category column", cat_cols if cat_cols else num_cols, key="box_cat_multi")
 
             # Use first dataset for single-category box plot
-            sel = st.selectbox("Select dataset", list(st.session_state.datasets.keys()), key="box_ds_cat")
+            sel = st.selectbox("Select dataset", list(st.session_state.datasets.keys()), key="box_ds_cat", format_func=get_display_name)
             ds = st.session_state.datasets[sel]
             if val_col in ds["df"].columns and cat_col in ds["df"].columns:
+                display_name_str = ds["display_name"]
                 fig = px.box(
                     ds["df"], x=cat_col, y=val_col,
-                    title=f"{val_col} by {cat_col} ({sel})",
+                    title=f"{val_col} by {cat_col} ({display_name_str})",
                     height=height,
                     color=cat_col,
                     color_discrete_sequence=px.colors.qualitative.Set2
@@ -793,7 +827,7 @@ if st.session_state.datasets:
         elif stat_type == "🎯 Density Plot":
             dense_col = st.selectbox("Select column", num_cols, key="dense_col_multi")
             avail = list(st.session_state.datasets.keys())
-            sel_files = st.multiselect("Select files for density", avail, default=avail, key="dense_files")
+            sel_files = st.multiselect("Select files for density", avail, default=avail, key="dense_files", format_func=get_display_name)
 
             if sel_files:
                 fig = go.Figure()
@@ -803,11 +837,12 @@ if st.session_state.datasets:
                     if dense_col not in ds["df"].columns:
                         continue
                     plot_df = ds["df"][[dense_col]].dropna()
+                    display_name_str = ds["display_name"]
                     fig.add_trace(go.Scatter(
                         x=plot_df[dense_col],
                         y=[1] * len(plot_df),
                         mode='markers',
-                        name=fname,
+                        name=display_name_str,
                         marker=dict(
                             color=colors[i % len(colors)],
                             size=4,
@@ -831,13 +866,14 @@ if st.session_state.datasets:
             bar_col = st.selectbox("Select column", cat_cols if cat_cols else num_cols, key="bar_col_multi")
             top_n = st.slider("Show top N categories", 5, 50, 20, key="bar_top_multi")
 
-            sel = st.selectbox("Select dataset", list(st.session_state.datasets.keys()), key="bar_ds")
+            sel = st.selectbox("Select dataset", list(st.session_state.datasets.keys()), key="bar_ds", format_func=get_display_name)
             ds = st.session_state.datasets[sel]
             if bar_col in ds["df"].columns:
+                display_name_str = ds["display_name"]
                 top_cats = ds["df"][bar_col].value_counts().head(top_n)
                 fig = px.bar(
                     x=top_cats.index, y=top_cats.values,
-                    title=f"Top {top_n} {bar_col} ({sel})",
+                    title=f"Top {top_n} {bar_col} ({display_name_str})",
                     height=height,
                     color=top_cats.values,
                     color_continuous_scale="Blues"
@@ -851,13 +887,14 @@ if st.session_state.datasets:
             if len(num_cols) < 2:
                 st.warning("⚠️ Need at least 2 numeric columns for correlation heatmap.")
             else:
-                sel = st.selectbox("Select dataset", list(st.session_state.datasets.keys()), key="corr_ds")
+                sel = st.selectbox("Select dataset", list(st.session_state.datasets.keys()), key="corr_ds", format_func=get_display_name)
                 ds = st.session_state.datasets[sel]
+                display_name_str = ds["display_name"]
                 df_corr = ds["df"][num_cols].corr()
                 fig = px.imshow(
                     df_corr,
                     text_auto=True,
-                    title=f"Correlation Heatmap ({sel})",
+                    title=f"Correlation Heatmap ({display_name_str})",
                     height=height,
                     color_continuous_scale="RdBu_r",
                     aspect="auto"
@@ -882,8 +919,10 @@ if st.session_state.datasets:
 
             # Detect datetime column
             avail_ds = list(st.session_state.datasets.keys())
-            tod_ds_sel = st.selectbox("Select dataset", avail_ds, key="tod_ds")
-            tod_ds = st.session_state.datasets[tod_ds_sel]["df"]
+            tod_ds_sel = st.selectbox("Select dataset", avail_ds, key="tod_ds", format_func=get_display_name)
+            tod_ds_obj = st.session_state.datasets[tod_ds_sel]
+            tod_ds = tod_ds_obj["df"]
+            tod_display_name = tod_ds_obj["display_name"]
 
             dt_col_tod = None
             for dc in ["Datetime", "datetime", "Date", "date", "Time", "time"]:
@@ -956,7 +995,7 @@ if st.session_state.datasets:
                         ))
 
                     fig.update_layout(
-                        title=dict(text=f"{tod_val_col} — Time-of-Day ({tod_interval}) | {tod_ds_sel}", font_size=16),
+                        title=dict(text=f"{tod_val_col} — Time-of-Day ({tod_interval}) | {tod_display_name}", font_size=16),
                         template="plotly_white",
                         height=height,
                         xaxis=dict(title="Time of Day", tickangle=45),
@@ -1027,7 +1066,8 @@ if st.session_state.datasets:
                     "📂 Select files to overlay",
                     avail_files_3d,
                     default=avail_files_3d[:1] if len(avail_files_3d) == 1 else avail_files_3d,
-                    key="3d_files"
+                    key="3d_files",
+                    format_func=get_display_name
                 )
 
                 # Downsample by multiplier — e.g. "2×" means halve the rows, "5×" means keep 1/5
@@ -1096,12 +1136,13 @@ if st.session_state.datasets:
                             z_vals = plot_df[z_axis].values
 
                         color = colors[i % len(colors)]
+                        display_name_str = st.session_state.datasets[fname]["display_name"]
                         fig.add_trace(go.Scatter3d(
                             x=x_vals.tolist(),
                             y=y_vals.tolist(),
                             z=z_vals.tolist(),
                             mode='markers',
-                            name=fname,
+                            name=display_name_str,
                             marker=dict(
                                 color=color,
                                 size=marker_size,
@@ -1109,7 +1150,7 @@ if st.session_state.datasets:
                                 line=dict(width=edge_width, color=edge_color)
                             ),
                             hovertemplate=(
-                                f"<b>{fname}</b><br>"
+                                f"<b>{display_name_str}</b><br>"
                                 f"{x_axis}: %{{x:.3f}}<br>"
                                 f"{y_axis}: %{{y:.3f}}<br>"
                                 f"{z_axis}: %{{z:.3f}}<extra></extra>"
@@ -1182,7 +1223,8 @@ if st.session_state.datasets:
                         "📂 Select files to overlay",
                         avail_files_3d,
                         default=avail_files_3d[:1] if len(avail_files_3d) == 1 else avail_files_3d,
-                        key="3d_line_files"
+                        key="3d_line_files",
+                        format_func=get_display_name
                     )
 
                     if not selected_3d_line:
@@ -1268,20 +1310,22 @@ if st.session_state.datasets:
         if len(st.session_state.datasets) == 1:
             fname = list(st.session_state.datasets.keys())[0]
             ds = st.session_state.datasets[fname]
+            display_name = ds["display_name"]
             st.download_button(
                 "📄 Download as CSV",
                 ds["df"].to_csv(index=False).encode(),
-                f"processed_{fname}.csv",
+                f"processed_{display_name}.csv",
                 "text/csv"
             )
         else:
             # Multi-dataset: offer individual downloads
-            sel = st.selectbox("Select dataset to export", list(st.session_state.datasets.keys()), key="export_ds")
+            sel = st.selectbox("Select dataset to export", list(st.session_state.datasets.keys()), key="export_ds", format_func=get_display_name)
             ds = st.session_state.datasets[sel]
+            display_name = ds["display_name"]
             st.download_button(
                 "📄 Download as CSV",
                 ds["df"].to_csv(index=False).encode(),
-                f"processed_{sel}.csv",
+                f"processed_{display_name}.csv",
                 "text/csv",
                 key="dl_csv_multi"
             )
