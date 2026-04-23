@@ -55,9 +55,15 @@ def load_turbine_csv(filepath, low_memory=False):
         data_ext_names = data_ext_names.dropna(subset=["datetime"])
         data_ext_names = data_ext_names.set_index("datetime")
 
-        # Convert all sensor columns to float
+        # Convert sensor columns to float where logical, preserving text categories
         for col in data_ext_names.columns:
-            data_ext_names[col] = pd.to_numeric(data_ext_names[col], errors="coerce")
+            converted = pd.to_numeric(data_ext_names[col], errors="coerce")
+            orig_non_na = data_ext_names[col].notna().sum()
+            new_non_na = converted.notna().sum()
+            if orig_non_na > 0 and (new_non_na / orig_non_na) < 0.5:
+                pass # Keep original string/categorical column
+            else:
+                data_ext_names[col] = converted
         data = data_ext_names
 
     except Exception:
@@ -69,9 +75,15 @@ def load_turbine_csv(filepath, low_memory=False):
         data_sensor_ids = data_sensor_ids.dropna(subset=["datetime"])
         data_sensor_ids = data_sensor_ids.set_index("datetime")
 
-        # Convert all sensor columns to float
+        # Convert sensor columns to float where logical, preserving text categories
         for col in data_sensor_ids.columns:
-            data_sensor_ids[col] = pd.to_numeric(data_sensor_ids[col], errors="coerce")
+            converted = pd.to_numeric(data_sensor_ids[col], errors="coerce")
+            orig_non_na = data_sensor_ids[col].notna().sum()
+            new_non_na = converted.notna().sum()
+            if orig_non_na > 0 and (new_non_na / orig_non_na) < 0.5:
+                pass # Keep original string/categorical column
+            else:
+                data_sensor_ids[col] = converted
         data = data_sensor_ids
 
 

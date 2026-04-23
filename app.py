@@ -204,9 +204,17 @@ if uploaded_files:
                     df = df.dropna(subset=[dt_col])
                     df = df.set_index(dt_col)
 
-                # Convert all remaining columns to float
+                # Convert remaining columns to numeric where it makes sense
                 for col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors="coerce")
+                    converted = pd.to_numeric(df[col], errors="coerce")
+                    # If conversion destroys more than 50% of the valid data, assume it's a categorical text column
+                    orig_non_na = df[col].notna().sum()
+                    new_non_na = converted.notna().sum()
+                    
+                    if orig_non_na > 0 and (new_non_na / orig_non_na) < 0.5:
+                        pass # Keep original string/categorical column
+                    else:
+                        df[col] = converted
                 
                 if dt_col is not None:
                     df = df.reset_index().rename(columns={dt_col: "Datetime"})
@@ -277,12 +285,27 @@ if st.session_state.datasets:
                 col_types[col] = get_column_type(ds["df"][col])
                 break
 
-    num_cols  = [c for c, t in col_types.items() if t == "numeric"]
-    cat_cols  = [c for c, t in col_types.items() if t == "categorical"]
+    num_cols_auto  = [c for c, t in col_types.items() if t == "numeric"]
+    cat_cols_auto  = [c for c, t in col_types.items() if t == "categorical"]
     date_cols = [c for c, t in col_types.items() if t == "datetime"]
 
-    # ── Sidebar: Data Summary ────────────────────────────────
+    # ── Sidebar: Settings & Summary ──────────────────────────
     with st.sidebar:
+        st.header("⚙️ Column Settings")
+        # Allow user to override categorical columns
+        # Filter out date columns from the selection
+        non_date_cols = [c for c in all_cols if c not in date_cols]
+        cat_cols = st.multiselect(
+            "Select Categorical Columns",
+            options=non_date_cols,
+            default=cat_cols_auto,
+            help="Select columns that should be treated as categories (text/labels) instead of numbers. Useful for numeric IDs."
+        )
+        
+        # update num_cols based on selection
+        num_cols = [c for c in num_cols_auto if c not in cat_cols]
+
+        st.divider()
         st.header("📋 Data Summary")
         st.metric("Datasets loaded", len(st.session_state.datasets))
 
@@ -291,6 +314,7 @@ if st.session_state.datasets:
         st.metric("Total rows (all files)", total_rows)
         st.metric("Total columns", total_cols)
         st.metric("Numeric cols", len(num_cols))
+        st.metric("Categorical cols", len(cat_cols))
         st.metric("Date cols", len(date_cols))
 
         st.subheader("📂 Dataset Details")
@@ -672,7 +696,6 @@ if st.session_state.datasets:
                 "📦 Box Plot (by File)",
                 "📦 Box Plot (Distribution by Category)",
                 "🎯 Density Plot",
-                "📈 Bar Chart (Categorical counts)",
                 "🔥 Correlation Heatmap",
                 "📊 Multi-file Histogram Overlay",
                 "⏱️ Time-of-Day Box Plot",
@@ -804,25 +827,32 @@ if st.session_state.datasets:
                 st.info("Select files and a value column.")
 
         elif stat_type == "📦 Box Plot (Distribution by Category)":
-            val_col = st.selectbox("Value column (numeric)", num_cols, key="box_val_cat")
-            cat_col = st.selectbox("Category column", cat_cols if cat_cols else num_cols, key="box_cat_multi")
-
-            # Use first dataset for single-category box plot
-            sel = st.selectbox("Select dataset", list(st.session_state.datasets.keys()), key="box_ds_cat", format_func=get_display_name)
-            ds = st.session_state.datasets[sel]
-            if val_col in ds["df"].columns and cat_col in ds["df"].columns:
-                display_name_str = ds["display_name"]
-                fig = px.box(
-                    ds["df"], x=cat_col, y=val_col,
-                    title=f"{val_col} by {cat_col} ({display_name_str})",
-                    height=height,
-                    color=cat_col,
-                    color_discrete_sequence=px.colors.qualitative.Set2
-                )
-                fig.update_layout(template="plotly_white", showlegend=False)
-                st.plotly_chart(fig, use_container_width=True)
+            if not num_cols or not cat_cols:
+                st.warning("⚠️ Need at least one numeric and one categorical column.")
             else:
-                st.warning(f"Selected dataset missing columns.")
+                val_col = st.selectbox("Value column (numeric)", num_cols, key="box_val_cat")
+                cat_col = st.selectbox("Category column", cat_cols, key="box_cat_multi")
+
+                # Use first dataset for single-category box plot
+                sel = st.selectbox("Select dataset", list(st.session_state.datasets.keys()), key="box_ds_cat", format_func=get_display_name)
+                ds = st.session_state.datasets[sel]
+                if val_col in ds["df"].columns and cat_col in ds["df"].columns:
+                    display_name_str = ds["display_name"]
+                    # Ensure category is treated as string for discrete grouping
+                    temp_df = ds["df"][[val_col, cat_col]].dropna().copy()
+                    temp_df[cat_col] = temp_df[cat_col].astype(str)
+                    
+                    fig = px.box(
+                        temp_df, x=cat_col, y=val_col,
+                        title=f"{val_col} by {cat_col} ({display_name_str})",
+                        height=height,
+                        color=cat_col,
+                        color_discrete_sequence=px.colors.qualitative.Set2
+                    )
+                    fig.update_layout(template="plotly_white", showlegend=False)
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.warning(f"Selected dataset missing columns.")
 
         elif stat_type == "🎯 Density Plot":
             dense_col = st.selectbox("Select column", num_cols, key="dense_col_multi")
@@ -861,27 +891,6 @@ if st.session_state.datasets:
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.info("Select at least one file.")
-
-        elif stat_type == "📈 Bar Chart (Categorical counts)":
-            bar_col = st.selectbox("Select column", cat_cols if cat_cols else num_cols, key="bar_col_multi")
-            top_n = st.slider("Show top N categories", 5, 50, 20, key="bar_top_multi")
-
-            sel = st.selectbox("Select dataset", list(st.session_state.datasets.keys()), key="bar_ds", format_func=get_display_name)
-            ds = st.session_state.datasets[sel]
-            if bar_col in ds["df"].columns:
-                display_name_str = ds["display_name"]
-                top_cats = ds["df"][bar_col].value_counts().head(top_n)
-                fig = px.bar(
-                    x=top_cats.index, y=top_cats.values,
-                    title=f"Top {top_n} {bar_col} ({display_name_str})",
-                    height=height,
-                    color=top_cats.values,
-                    color_continuous_scale="Blues"
-                )
-                fig.update_layout(template="plotly_white", xaxis_title=bar_col, yaxis_title="Count", showlegend=False)
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.warning(f"`{sel}` missing column `{bar_col}`")
 
         elif stat_type == "🔥 Correlation Heatmap":
             if len(num_cols) < 2:
