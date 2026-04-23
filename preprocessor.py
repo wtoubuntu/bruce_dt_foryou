@@ -14,7 +14,6 @@ import numpy as np
 from pathlib import Path
 from datetime import datetime
 
-RAW_DIR = Path("raw")
 
 
 def load_apa_csv(filepath, low_memory=False):
@@ -92,64 +91,3 @@ def load_apa_csv(filepath, low_memory=False):
     return data, metadata
 
 
-def available_files():
-    """List all CSV files in the raw/ directory."""
-    if not RAW_DIR.exists():
-        return []
-    return sorted([f for f in RAW_DIR.glob("*.csv")])
-
-
-def get_sensor_summary(data, metadata):
-    """Build a per-sensor summary DataFrame."""
-    rows = []
-    for sid in data.columns:
-        meta = metadata.get(sid, {})
-        col_data = data[sid].dropna()
-        rows.append({
-            "Sensor ID":         sid,
-            "Description":       meta.get("description", ""),
-            "Units":             meta.get("units", ""),
-            "Count":             int(col_data.count()),
-            "Mean":              round(float(col_data.mean()), 4) if len(col_data) else np.nan,
-            "Std":               round(float(col_data.std()), 4) if len(col_data) > 1 else np.nan,
-            "Min":               round(float(col_data.min()), 4) if len(col_data) else np.nan,
-            "Max":               round(float(col_data.max()), 4) if len(col_data) else np.nan,
-        })
-    return pd.DataFrame(rows)
-
-
-def detect_files():
-    """
-    Auto-detect file types based on column names.
-    Returns dict: {label: filepath}
-    """
-    files = available_files()
-    result = {}
-    for f in files:
-        try:
-            raw = pd.read_csv(f, header=None, nrows=1, low_memory=False)
-            cols = raw.iloc[0, 1:].tolist()
-            name = f.stem
-
-            # CheckBalance/Piston FIRST — has 31MBA10AE005XQ41 which is unique
-            has_31mba_ae = any("31MBA10AE005XQ41" in str(c) for c in cols)
-            has_31mka_ce = any("31MKA10CE010XQ41" in str(c) for c in cols)
-
-            if has_31mba_ae:
-                label = "GT1 Balance/Piston"
-            elif has_31mka_ce:
-                label = "GT1 Main"
-            elif name.lower().startswith("train"):
-                label = f"Train ({name})"
-            elif name.lower().startswith("test"):
-                label = f"Test ({name})"
-            else:
-                label = name
-
-            # Avoid duplicates by appending filename
-            if label in result:
-                label = f"{label} ({f.name})"
-            result[label] = str(f)
-        except Exception:
-            result[f.name] = str(f)
-    return result
