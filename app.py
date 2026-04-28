@@ -65,16 +65,12 @@ def lttb_downsample(x, y, n_target):
         avg_x = float(x_num[next_buck_start:next_buck_end + 1].mean())
         avg_y = float(y_num[next_buck_start:next_buck_end + 1].mean())
 
-        max_area = -1.0
-        max_area_idx = buck_start
-        for j in range(buck_start, buck_end + 1):
-            dx_a = ax - avg_x
-            dy_j = y_num[j].item() - ay
-            dx_j = x_num[j].item() - avg_x
-            area = abs(dx_a * dy_j - dx_j * (avg_y - ay))
-            if area > max_area:
-                max_area = area
-                max_area_idx = j
+        j_range = np.arange(buck_start, buck_end + 1)
+        dx_a = ax - avg_x
+        dy_j = y_num[j_range] - ay
+        dx_j = x_num[j_range] - avg_x
+        areas = np.abs(dx_a * dy_j - dx_j * (avg_y - ay))
+        max_area_idx = j_range[np.argmax(areas)]
 
         result_x.append(x[max_area_idx])
         result_y.append(y[max_area_idx])
@@ -86,13 +82,18 @@ def lttb_downsample(x, y, n_target):
     result_y.append(y[-1])
     return np.array(result_x), np.array(result_y)
 
-# Use browser renderer (Chrome) for interactive WebGL plots
-pio.renderers.default = "browser"
+
 
 # ── Helper function for display names ────────────────────
 def get_display_name(key):
     """Return the display name for a dataset key."""
     return st.session_state.datasets[key]["display_name"]
+
+RESAMPLE_OPTIONS = ["All (native)", "1min", "2min", "5min", "10min", "15min", "30min", "1h", "2h", "4h", "6h", "12h", "1D"]
+
+@st.cache_data
+def df_to_csv_bytes(df):
+    return df.to_csv(index=False).encode('utf-8')
 
 st.set_page_config(
     page_title="Bruce's Data Viz Tool",
@@ -256,7 +257,7 @@ if st.session_state.datasets:
         display_name = st.session_state.datasets[key]["display_name"]
         with col[(i % 5) + 1]:
             st.caption(f"• {display_name}")
-    with col[min(len(st.session_state.datasets), 4) + 1]:
+    with col[min(len(st.session_state.datasets) + 1, 4)]:
         if st.button("🗑️ Clear all"):
             st.session_state.datasets = {}
             st.rerun()
@@ -403,8 +404,8 @@ if st.session_state.datasets:
             with col3:
                 resample_rule = st.selectbox(
                     "⏱️ Resample to",
-                    ["All (native)", "1min", "2min", "5min", "10min", "15min", "30min", "1h", "2h", "4h", "6h", "12h", "1D"],
-                    index=["All (native)", "1min", "2min", "5min", "10min", "15min", "30min", "1h", "2h", "4h", "6h", "12h", "1D"].index(st.session_state.resample_rule),
+                    RESAMPLE_OPTIONS,
+                    index=RESAMPLE_OPTIONS.index(st.session_state.resample_rule),
                     key="ts_resample_k",
                     on_change=lambda: st.session_state.__setitem__("resample_rule", st.session_state.ts_resample_k),
                 )
@@ -490,8 +491,8 @@ if st.session_state.datasets:
                         # Add range bar if requested
                         if show_rangebars:
                             # Show ±5% of y range as a semi-transparent band
-                            y_mid = y_vals.mean()
-                            y_std = y_vals.std()
+                            y_mid = plot_df[y_col].mean()
+                            y_std = plot_df[y_col].std()
                             y_lo = y_mid - 2 * y_std
                             y_hi = y_mid + 2 * y_std
                             fig.add_trace(go.Scatter(
@@ -569,8 +570,8 @@ if st.session_state.datasets:
             with col3:
                 resample_rule_sc = st.selectbox(
                     "⏱️ Resample to",
-                    ["All (native)", "1min", "2min", "5min", "10min", "15min", "30min", "1h", "2h", "4h", "6h", "12h", "1D"],
-                    index=["All (native)", "1min", "2min", "5min", "10min", "15min", "30min", "1h", "2h", "4h", "6h", "12h", "1D"].index(st.session_state.resample_rule),
+                    RESAMPLE_OPTIONS,
+                    index=RESAMPLE_OPTIONS.index(st.session_state.resample_rule),
                     key="sc_resample_k",
                     on_change=lambda: st.session_state.__setitem__("resample_rule", st.session_state.sc_resample_k),
                 )
@@ -655,7 +656,6 @@ if st.session_state.datasets:
 
                     # Regression line per file
                     if show_reg:
-                        import numpy as np
                         x_clean = plot_df[sc_x].values
                         y_clean = plot_df[sc_y].values
                         mask = ~(np.isnan(x_clean) | np.isnan(y_clean))
@@ -1234,7 +1234,7 @@ if st.session_state.datasets:
                     # Resampling option
                     resample_3d = st.selectbox(
                         "⏱️ Resample to",
-                        ["All (native)", "1min", "2min", "5min", "10min", "15min", "30min", "1h", "2h", "4h", "6h", "12h", "1D"],
+                        RESAMPLE_OPTIONS,
                         index=0,
                         key="3d_resample",
                     )
@@ -1333,7 +1333,7 @@ if st.session_state.datasets:
             display_name = ds["display_name"]
             st.download_button(
                 "📄 Download as CSV",
-                ds["df"].to_csv(index=False).encode(),
+                df_to_csv_bytes(ds["df"]),
                 f"processed_{display_name}.csv",
                 "text/csv"
             )
@@ -1344,7 +1344,7 @@ if st.session_state.datasets:
             display_name = ds["display_name"]
             st.download_button(
                 "📄 Download as CSV",
-                ds["df"].to_csv(index=False).encode(),
+                df_to_csv_bytes(ds["df"]),
                 f"processed_{display_name}.csv",
                 "text/csv",
                 key="dl_csv_multi"

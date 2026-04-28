@@ -11,12 +11,22 @@ Row 5+: Data (datetime | sensor values)
 
 import pandas as pd
 import numpy as np
-from pathlib import Path
-from datetime import datetime
 
 
 
-def load_apa_csv(filepath, low_memory=False):
+def _coerce_numeric_columns(df: pd.DataFrame) -> pd.DataFrame:
+    for col in df.columns:
+        converted = pd.to_numeric(df[col], errors="coerce")
+        orig_non_na = df[col].notna().sum()
+        new_non_na = converted.notna().sum()
+        if orig_non_na > 0 and (new_non_na / orig_non_na) < 0.5:
+            pass # Keep original string/categorical column
+        else:
+            df[col] = converted
+    return df
+
+
+def load_apa_csv(filepath, low_memory=True):
     """
     Load a turbine sensor CSV with metadata header rows.
     Accepts a file path (str/Path) or a file-like object (e.g. StringIO).
@@ -46,6 +56,7 @@ def load_apa_csv(filepath, low_memory=False):
 
     # Parse data (rows 5 onward)
     data = raw.iloc[5:, :].copy()
+    del raw
 
     try:
         data_ext_names = data.copy()
@@ -54,15 +65,7 @@ def load_apa_csv(filepath, low_memory=False):
         data_ext_names = data_ext_names.dropna(subset=["datetime"])
         data_ext_names = data_ext_names.set_index("datetime")
 
-        # Convert sensor columns to float where logical, preserving text categories
-        for col in data_ext_names.columns:
-            converted = pd.to_numeric(data_ext_names[col], errors="coerce")
-            orig_non_na = data_ext_names[col].notna().sum()
-            new_non_na = converted.notna().sum()
-            if orig_non_na > 0 and (new_non_na / orig_non_na) < 0.5:
-                pass # Keep original string/categorical column
-            else:
-                data_ext_names[col] = converted
+        data_ext_names = _coerce_numeric_columns(data_ext_names)
         data = data_ext_names
 
     except Exception:
@@ -74,15 +77,7 @@ def load_apa_csv(filepath, low_memory=False):
         data_sensor_ids = data_sensor_ids.dropna(subset=["datetime"])
         data_sensor_ids = data_sensor_ids.set_index("datetime")
 
-        # Convert sensor columns to float where logical, preserving text categories
-        for col in data_sensor_ids.columns:
-            converted = pd.to_numeric(data_sensor_ids[col], errors="coerce")
-            orig_non_na = data_sensor_ids[col].notna().sum()
-            new_non_na = converted.notna().sum()
-            if orig_non_na > 0 and (new_non_na / orig_non_na) < 0.5:
-                pass # Keep original string/categorical column
-            else:
-                data_sensor_ids[col] = converted
+        data_sensor_ids = _coerce_numeric_columns(data_sensor_ids)
         data = data_sensor_ids
 
 
