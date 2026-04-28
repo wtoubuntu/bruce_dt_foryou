@@ -335,34 +335,33 @@ if st.session_state.datasets:
                     st.write(f"🔧 {len(ds['metadata'])} sensors")
 
     # ── Quick Stats ─────────────────────────────────────────
-    st.subheader("📈 Quick Statistics")
-
-    if len(st.session_state.datasets) == 1:
-        # Single dataset — show normal stats
-        fname = list(st.session_state.datasets.keys())[0]
-        ds = st.session_state.datasets[fname]
-        df = ds["df"]
-        tab_stat, tab_head = st.tabs(["📊 Statistics", "🔍 Data Preview"])
-        with tab_stat:
-            if len(num_cols) > 0:
-                st.dataframe(df[num_cols].describe(), use_container_width=True)
-            else:
-                st.info("No numeric columns found for statistics.")
-        with tab_head:
-            st.dataframe(df.head(10), use_container_width=True)
-    else:
-        # Multi-dataset — show comparison
-        tab_stat, tab_head = st.tabs(["📊 Statistics", "🔍 Data Preview"])
-        with tab_stat:
-            sel = st.selectbox("Select dataset for stats", list(st.session_state.datasets.keys()), key="stats_dataset", format_func=get_display_name)
-            ds = st.session_state.datasets[sel]
+    with st.expander("📈 Quick Statistics & Data Preview", expanded=False):
+        if len(st.session_state.datasets) == 1:
+            # Single dataset — show normal stats
+            fname = list(st.session_state.datasets.keys())[0]
+            ds = st.session_state.datasets[fname]
             df = ds["df"]
-            if len(num_cols) > 0:
-                st.dataframe(df[num_cols].describe(), use_container_width=True)
-            else:
-                st.info("No numeric columns found for statistics.")
-        with tab_head:
-            st.dataframe(df.head(10), use_container_width=True)
+            tab_stat, tab_head = st.tabs(["📊 Statistics", "🔍 Data Preview"])
+            with tab_stat:
+                if len(num_cols) > 0:
+                    st.dataframe(df[num_cols].describe(), use_container_width=True)
+                else:
+                    st.info("No numeric columns found for statistics.")
+            with tab_head:
+                st.dataframe(df.head(10), use_container_width=True)
+        else:
+            # Multi-dataset — show comparison
+            tab_stat, tab_head = st.tabs(["📊 Statistics", "🔍 Data Preview"])
+            with tab_stat:
+                sel = st.selectbox("Select dataset for stats", list(st.session_state.datasets.keys()), key="stats_dataset", format_func=get_display_name)
+                ds = st.session_state.datasets[sel]
+                df = ds["df"]
+                if len(num_cols) > 0:
+                    st.dataframe(df[num_cols].describe(), use_container_width=True)
+                else:
+                    st.info("No numeric columns found for statistics.")
+            with tab_head:
+                st.dataframe(df.head(10), use_container_width=True)
 
     st.divider()
 
