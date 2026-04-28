@@ -410,6 +410,18 @@ if st.session_state.datasets:
                     on_change=lambda: st.session_state.__setitem__("resample_rule", st.session_state.ts_resample_k),
                 )
 
+            # Max points control — only shown when resample = "All (native)"
+            if resample_rule == "All (native)":
+                ts_max_points = st.selectbox(
+                    "📊 Max points per file",
+                    [500, 1000, 2000, 5000, 10000, "All (may be slow)"],
+                    index=3,
+                    key="ts_max_points",
+                    format_func=lambda x: str(x) if isinstance(x, int) else x,
+                )
+            else:
+                ts_max_points = "All (native)"
+
             # File selector for overlay
             selected_files = st.multiselect(
                 "📂 Select files to overlay",
@@ -466,10 +478,10 @@ if st.session_state.datasets:
                             y_vals = agg_df[y_col]
                         else:
                             # LTTB downsample only for very large native datasets
-                            if len(plot_df) > 5000:
+                            if ts_max_points != "All (may be slow)" and len(plot_df) > ts_max_points:
                                 x_raw = plot_df[dt_col].values
                                 y_raw = plot_df[y_col].values.astype(float)
-                                x_ds, y_ds = lttb_downsample(x_raw, y_raw, 5000)
+                                x_ds, y_ds = lttb_downsample(x_raw, y_raw, ts_max_points)
                                 x_vals = x_ds.astype(str)
                                 y_vals = y_ds
                             else:
