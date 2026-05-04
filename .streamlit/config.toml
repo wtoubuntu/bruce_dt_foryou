@@ -1,2 +1,2 @@
 [server]
-enableXsrfProtection = True
+enableXsrfProtection = true
