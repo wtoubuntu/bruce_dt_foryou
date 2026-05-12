@@ -205,6 +205,9 @@ if "resample_rule" not in st.session_state:
     st.session_state.resample_rule = "All (native)"
 
 if uploaded_files:
+    if len(uploaded_files) > 5:
+        st.error("Maximum 5 files allowed. Please remove some files and try again.")
+        uploaded_files = uploaded_files[:5]
     for uploaded_file in uploaded_files:
         # 1. Use Streamlit's built-in unique ID (O(1) time, no hashing required)
         unique_key = uploaded_file.file_id
