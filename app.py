@@ -21,6 +21,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="plotly")
 
 
 # ── LTTB Downsampling (Largest Triangle Three Buckets) ──────
+@st.cache_data
 def lttb_downsample(x, y, n_target):
     """
     Downsample (x, y) to at most n_target points using LTTB algorithm.
@@ -94,6 +95,48 @@ RESAMPLE_OPTIONS = ["All (native)", "1min", "2min", "5min", "10min", "15min", "3
 @st.cache_data
 def df_to_csv_bytes(df):
     return df.to_csv(index=False).encode('utf-8')
+
+
+@st.cache_data
+def _cached_load_apa_csv(file_bytes):
+    data, metadata = load_apa_csv(io.BytesIO(file_bytes))
+    df = data.reset_index().rename(columns={"datetime": "Datetime"})
+    return df, metadata
+
+
+@st.cache_data
+def _parse_tabular_file(file_bytes, is_excel):
+    buf = io.BytesIO(file_bytes)
+    df = pd.read_excel(buf) if is_excel else pd.read_csv(buf)
+    dt_candidates = ["date_time", "datetime", "date", "time", "timestamp", "date/time", "t"]
+    dt_col = None
+    for col in df.columns:
+        if str(col).lower().strip() in dt_candidates:
+            dt_col = col
+            break
+    if dt_col is None and len(df.columns) > 0:
+        dt_col = df.columns[0]
+    if dt_col in df.columns:
+        df[dt_col] = pd.to_datetime(df[dt_col], errors="coerce")
+        df = df.dropna(subset=[dt_col])
+        df = df.set_index(dt_col)
+    for col in df.columns:
+        converted = pd.to_numeric(df[col], errors="coerce")
+        orig_non_na = df[col].notna().sum()
+        new_non_na = converted.notna().sum()
+        if orig_non_na > 0 and (new_non_na / orig_non_na) < 0.5:
+            pass
+        else:
+            df[col] = converted
+    if dt_col is not None:
+        df = df.reset_index().rename(columns={dt_col: "Datetime"})
+    return df
+
+
+@st.cache_data
+def _resample_df(df, dt_col, value_cols, rule):
+    cols = [value_cols] if isinstance(value_cols, str) else list(value_cols)
+    return df.set_index(dt_col)[cols].resample(rule).mean().dropna().reset_index()
 
 st.set_page_config(
     page_title="Bruce's Data Viz Tool",
@@ -170,56 +213,22 @@ if uploaded_files:
             continue  # Exact file instance is already loaded
 
         try:
+            file_bytes = uploaded_file.read()
+
             if uploaded_file.name.endswith(".csv"):
-                uploaded_file.seek(0)
-                raw_check = pd.read_csv(uploaded_file, header=None, nrows=1)
+                raw_check = pd.read_csv(io.BytesIO(file_bytes), header=None, nrows=1)
                 first_val = str(raw_check.iloc[0, 0]) if raw_check.shape[0] > 0 else ""
-                uploaded_file.seek(0)
 
                 if first_val == "Point Name":
-                    data, metadata = load_apa_csv(uploaded_file)
-                    df = data.reset_index().rename(columns={"datetime": "Datetime"})
+                    df, metadata = _cached_load_apa_csv(file_bytes)
                     file_type = "turbine"
                 else:
-                    df = pd.read_csv(uploaded_file)
+                    df = _parse_tabular_file(file_bytes, False)
                     file_type = "standard"
+                    metadata = None
             else:
-                df = pd.read_excel(uploaded_file)
+                df = _parse_tabular_file(file_bytes, True)
                 file_type = "excel"
-                
-            if file_type in ["standard", "excel"]:
-                # Auto-detect date/time column
-                dt_candidates = ["date_time", "datetime", "date", "time", "timestamp", "date/time", "t"]
-                dt_col = None
-                for col in df.columns:
-                    if str(col).lower().strip() in dt_candidates:
-                        dt_col = col
-                        break
-                        
-                # Fallback to first column if no match found
-                if dt_col is None and len(df.columns) > 0:
-                    dt_col = df.columns[0]
-                    
-                if dt_col in df.columns:
-                    df[dt_col] = pd.to_datetime(df[dt_col], errors="coerce")
-                    df = df.dropna(subset=[dt_col])
-                    df = df.set_index(dt_col)
-
-                # Convert remaining columns to numeric where it makes sense
-                for col in df.columns:
-                    converted = pd.to_numeric(df[col], errors="coerce")
-                    # If conversion destroys more than 50% of the valid data, assume it's a categorical text column
-                    orig_non_na = df[col].notna().sum()
-                    new_non_na = converted.notna().sum()
-                    
-                    if orig_non_na > 0 and (new_non_na / orig_non_na) < 0.5:
-                        pass # Keep original string/categorical column
-                    else:
-                        df[col] = converted
-                
-                if dt_col is not None:
-                    df = df.reset_index().rename(columns={dt_col: "Datetime"})
-                    
                 metadata = None
 
             # 2. Generate a clean display name with a suffix if necessary
@@ -473,7 +482,7 @@ if st.session_state.datasets:
                         # Resample by time interval if selected
                         if resample_rule != "All (native)":
                             rule = resample_rule
-                            agg_df = plot_df.set_index(dt_col)[y_col].resample(rule).mean().dropna().reset_index()
+                            agg_df = _resample_df(plot_df, dt_col, y_col, rule)
                             x_vals = agg_df[dt_col].astype(str)
                             y_vals = agg_df[y_col]
                         else:
@@ -626,7 +635,7 @@ if st.session_state.datasets:
                     # Apply resampling (same logic as time series plot)
                     if resample_rule_sc != "All (native)" and dt_col:
                         rule = resample_rule_sc
-                        plot_df = plot_df.set_index(dt_col)[[sc_x, sc_y]].resample(rule).mean().dropna().reset_index()
+                        plot_df = _resample_df(plot_df, dt_col, (sc_x, sc_y), rule)
                         x_vals = plot_df[sc_x].values
                         y_vals = plot_df[sc_y].values
                     elif max_points != "All (may be slow)" and len(plot_df) > max_points:
