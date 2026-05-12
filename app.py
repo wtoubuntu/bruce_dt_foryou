@@ -189,6 +189,7 @@ st.markdown('<p class="main-header">📊 Bruce\'s Data Viz Tool</p>', unsafe_all
 st.markdown('<p class="sub-header">Upload multiple files · Compare & overlay on the same graph · No coding required.</p>', unsafe_allow_html=True)
 
 # ── File Upload ─────────────────────────────────────────────
+st.info("Upload up to **5 files** (CSV or Excel) · Max **100 MB** per file · Supports standard CSV and turbine sensor exports")
 uploaded_files = st.file_uploader(
     "📁 Upload CSV or Excel files (select multiple)",
     type=["csv", "xlsx", "xls"],
