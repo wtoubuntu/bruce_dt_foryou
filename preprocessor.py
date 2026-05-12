@@ -28,7 +28,7 @@ def _coerce_numeric_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 def load_apa_csv(filepath, low_memory=True):
     """
-    Load a turbine sensor CSV with metadata header rows.
+    Load a CSV with metadata header rows.
     Accepts a file path (str/Path) or a file-like object (e.g. StringIO).
     Returns:
         data: cleaned DataFrame with datetime index and float columns
