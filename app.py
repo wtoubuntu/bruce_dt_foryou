@@ -264,7 +264,7 @@ if st.session_state.datasets:
         st.markdown("**📂 Loaded datasets:**")
     for i, key in enumerate(list(st.session_state.datasets.keys())):
         display_name = st.session_state.datasets[key]["display_name"]
-        with col[(i % 5) + 1]:
+        with col[(i % 4) + 1]:
             st.caption(f"• {display_name}")
     with col[min(len(st.session_state.datasets) + 1, 4)]:
         if st.button("🗑️ Clear all"):
