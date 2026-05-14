@@ -15,7 +15,6 @@ examplefiles/
 
 # Exported outputs
 *.html
-!README.md
 
 # Streamlit / IDE
 .streamlit/secrets.toml
@@ -24,3 +23,7 @@ examplefiles/
 
 # Claude tooling
 CLAUDE.md
+
+# Dev / infra tooling (not needed in deployment)
+test_infra.py
+INFRA_TEST_REPORT.md

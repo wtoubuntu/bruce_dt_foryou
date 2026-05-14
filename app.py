@@ -189,10 +189,11 @@ st.markdown('<p class="main-header">📊 Bruce\'s Data Viz Tool</p>', unsafe_all
 st.markdown('<p class="sub-header">Upload multiple files · Compare & overlay on the same graph · No coding required.</p>', unsafe_allow_html=True)
 
 # ── File Upload ─────────────────────────────────────────────
-MAX_UPLOAD_MB = 100
+MAX_UPLOAD_FILES = 3
+MAX_UPLOAD_MB = 50
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 
-st.info("Upload up to **5 files** (CSV or Excel) · Max **100 MB** per file · Supports standard CSV and turbine sensor exports")
+st.info(f"Upload up to **{MAX_UPLOAD_FILES} files** (CSV or Excel) · Max **{MAX_UPLOAD_MB} MB** per file · Supports standard CSV and turbine sensor exports")
 uploaded_files = st.file_uploader(
     "📁 Upload CSV or Excel files (select multiple)",
     type=["csv", "xlsx", "xls"],
@@ -209,9 +210,9 @@ if "resample_rule" not in st.session_state:
     st.session_state.resample_rule = "All (native)"
 
 if uploaded_files:
-    if len(uploaded_files) > 5:
-        st.error("Maximum 5 files allowed. Please remove some files and try again.")
-        uploaded_files = uploaded_files[:5]
+    if len(uploaded_files) > MAX_UPLOAD_FILES:
+        st.error(f"Maximum {MAX_UPLOAD_FILES} files allowed. Please remove some files and try again.")
+        uploaded_files = uploaded_files[:MAX_UPLOAD_FILES]
     for uploaded_file in uploaded_files:
         # 1. Use Streamlit's built-in unique ID (O(1) time, no hashing required)
         unique_key = uploaded_file.file_id
