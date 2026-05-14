@@ -1,6 +1,26 @@
-venv
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Data / large files
 raw/
-__pycache__
 examplefiles/
+*.csv
+*.xlsx
+*.parquet
+
+# Exported outputs
+*.html
+!README.md
+
+# Streamlit / IDE
+.streamlit/secrets.toml
+.vscode/
+.idea/
+
+# Claude tooling
 CLAUDE.md
-guide.html
