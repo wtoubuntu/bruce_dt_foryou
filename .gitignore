@@ -25,5 +25,6 @@ examplefiles/
 CLAUDE.md
 
 # Dev / infra tooling (not needed in deployment)
+hardware_test_report/
 test_infra.py
 INFRA_TEST_REPORT.md
