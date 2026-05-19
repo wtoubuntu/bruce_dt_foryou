@@ -1086,41 +1086,16 @@ if st.session_state.datasets:
         if len(num_cols) < 2:
             st.warning("⚠️ Need at least 2 numeric columns for 3D visualization.")
         else:
-            col1, col2 = st.columns([1, 1])
-            with col1:
-                plot_mode = st.selectbox(
-                    "Plot mode",
-                    ["3D Scatter", "3D Line / Time Series"],
-                    key="3d_mode"
-                )
-            with col2:
-                height_3d = st.slider("Chart height (px)", 400, 900, 600, key="3d_height")
+            plot_mode = st.selectbox(
+                "Plot mode",
+                ["3D Scatter", "3D Line / Time Series"],
+                key="3d_mode"
+            )
 
             avail_files_3d = list(st.session_state.datasets.keys())
 
-            # ── Shared marker/line style controls ──
             if plot_mode == "3D Scatter":
-                st.markdown("**Marker Style**")
-                m_col1, m_col2, m_col3, m_col4 = st.columns([1, 1, 1, 1])
-                with m_col1:
-                    marker_size = st.slider("Marker size", 1, 10, 2, key="3d_marker_size")
-                with m_col2:
-                    marker_opacity = st.slider("Opacity", 0.0, 1.0, 0.5, step=0.05, key="3d_marker_opacity")
-                with m_col3:
-                    edge_width = st.slider("Edge width", 0.0, 3.0, 0.0, step=0.1, key="3d_edge_width")
-                with m_col4:
-                    edge_color = st.color_picker("Edge color", "#000000", key="3d_edge_color")
-
-            if plot_mode == "3D Scatter":
-                col_x, col_y, col_z = st.columns([1, 1, 1])
-                with col_x:
-                    x_axis = st.selectbox("X-axis", num_cols, key="3d_x")
-                with col_y:
-                    y_axis = st.selectbox("Y-axis", num_cols, key="3d_y")
-                with col_z:
-                    z_axis = st.selectbox("Z-axis", num_cols, key="3d_z")
-
-                # File selection for overlay
+                # 1. Select files to overlay
                 selected_3d = st.multiselect(
                     "📂 Select files to overlay",
                     avail_files_3d,
@@ -1129,7 +1104,7 @@ if st.session_state.datasets:
                     format_func=get_display_name
                 )
 
-                # Downsample by multiplier — e.g. "2×" means halve the rows, "5×" means keep 1/5
+                # 2. Downsample multiplier
                 ref_fname = avail_files_3d[0] if avail_files_3d else None
                 row_count = len(st.session_state.datasets[ref_fname]["df"]) if ref_fname else 0
                 multiplier_labels = []
@@ -1139,13 +1114,34 @@ if st.session_state.datasets:
                         multiplier_labels.append(f"{m}×  →  ~{result_rows:,} pts")
                 multiplier_labels.insert(0, "All (native)")
 
-                default_idx = 0
                 selected_mult = st.selectbox(
                     "🔽 Downsample multiplier",
                     multiplier_labels,
-                    index=default_idx,
+                    index=0,
                     key="3d_downsample_mult",
                 )
+
+                # 3. Marker size | Opacity | Edge width | Edge color | Chart height
+                m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns([1, 1, 1, 1, 1])
+                with m_col1:
+                    marker_size = st.slider("Marker size", 1, 10, 2, key="3d_marker_size")
+                with m_col2:
+                    marker_opacity = st.slider("Opacity", 0.0, 1.0, 0.5, step=0.05, key="3d_marker_opacity")
+                with m_col3:
+                    edge_width = st.slider("Edge width", 0.0, 3.0, 0.0, step=0.1, key="3d_edge_width")
+                with m_col4:
+                    edge_color = st.color_picker("Edge color", "#000000", key="3d_edge_color")
+                with m_col5:
+                    height_3d = st.slider("Chart height (px)", 400, 900, 600, key="3d_height")
+
+                # 4. X-axis | Y-axis | Z-axis
+                col_x, col_y, col_z = st.columns([1, 1, 1])
+                with col_x:
+                    x_axis = st.selectbox("X-axis", num_cols, key="3d_x")
+                with col_y:
+                    y_axis = st.selectbox("Y-axis", num_cols, key="3d_y")
+                with col_z:
+                    z_axis = st.selectbox("Z-axis", num_cols, key="3d_z")
 
                 if not selected_3d:
                     st.info("Select at least one file.")
@@ -1171,12 +1167,12 @@ if st.session_state.datasets:
                         # Downsample with LTTB if multiplier is set
                         if mult_val > 0:
                             n_target = max(3, len(plot_df) // mult_val)
-                            
+
                             def safe_to_float(serie):
                                 if pd.api.types.is_datetime64_any_dtype(serie):
                                     return serie.values.astype(np.int64) / 1_000_000.0
                                 return serie.values.astype(float)
-                                
+
                             x_raw = safe_to_float(plot_df[x_axis])
                             y_raw = safe_to_float(plot_df[y_axis])
                             z_raw = safe_to_float(plot_df[z_axis])
@@ -1243,13 +1239,6 @@ if st.session_state.datasets:
                     )
 
             else:  # 3D Line / Time Series
-                st.markdown("**Marker Style**")
-                m_col1_time, m_col2_time = st.columns([1, 1])
-                with m_col1_time:
-                    marker_size = st.slider("Marker size", 1, 10, 2, key="3d_marker_size")
-                with m_col2_time:
-                    marker_opacity = st.slider("Opacity", 0.0, 1.0, 0.5, step=0.05, key="3d_marker_opacity")
-
                 # Detect datetime column first
                 dt_col_3d = None
                 for dc in ["Datetime", "datetime", "Date", "date", "Time", "time"]:
@@ -1263,21 +1252,7 @@ if st.session_state.datasets:
                 if not dt_col_3d:
                     st.warning("⚠️ No datetime column found — 3D Line requires a time/date axis.")
                 else:
-                    # Let user pick two numeric axes for Y and Z (X = time)
-                    col_y3, col_z3 = st.columns([1, 1])
-                    with col_y3:
-                        y3_axis = st.selectbox("Y-axis (numeric)", num_cols, key="3d_line_y")
-                    with col_z3:
-                        z3_axis = st.selectbox("Z-axis (numeric)", num_cols, key="3d_line_z")
-
-                    # Resampling option
-                    resample_3d = st.selectbox(
-                        "⏱️ Resample to",
-                        RESAMPLE_OPTIONS,
-                        index=0,
-                        key="3d_resample",
-                    )
-
+                    # 1. Select files to overlay
                     selected_3d_line = st.multiselect(
                         "📂 Select files to overlay",
                         avail_files_3d,
@@ -1285,6 +1260,30 @@ if st.session_state.datasets:
                         key="3d_line_files",
                         format_func=get_display_name
                     )
+
+                    # 2. Resample to
+                    resample_3d = st.selectbox(
+                        "⏱️ Resample to",
+                        RESAMPLE_OPTIONS,
+                        index=0,
+                        key="3d_resample",
+                    )
+
+                    # 3. Marker size | Opacity | Chart height
+                    m_col1_time, m_col2_time, m_col3_time = st.columns([1, 1, 1])
+                    with m_col1_time:
+                        marker_size = st.slider("Marker size", 1, 10, 2, key="3d_marker_size")
+                    with m_col2_time:
+                        marker_opacity = st.slider("Opacity", 0.0, 1.0, 0.5, step=0.05, key="3d_marker_opacity")
+                    with m_col3_time:
+                        height_3d = st.slider("Chart height (px)", 400, 900, 600, key="3d_height")
+
+                    # 4. Y-axis | Z-axis
+                    col_y3, col_z3 = st.columns([1, 1])
+                    with col_y3:
+                        y3_axis = st.selectbox("Y-axis (numeric)", num_cols, key="3d_line_y")
+                    with col_z3:
+                        z3_axis = st.selectbox("Z-axis (numeric)", num_cols, key="3d_line_z")
 
                     if not selected_3d_line:
                         st.info("Select at least one file.")
