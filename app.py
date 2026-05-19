@@ -371,11 +371,11 @@ if st.session_state.datasets:
             tab_stat, tab_head = st.tabs(["📊 Statistics", "🔍 Data Preview"])
             with tab_stat:
                 if len(num_cols) > 0:
-                    st.dataframe(df[num_cols].describe(), use_container_width=True)
+                    st.dataframe(df[num_cols].describe(), width='stretch')
                 else:
                     st.info("No numeric columns found for statistics.")
             with tab_head:
-                st.dataframe(df.head(10), use_container_width=True)
+                st.dataframe(df.head(10), width='stretch')
         else:
             # Multi-dataset — show comparison
             tab_stat, tab_head = st.tabs(["📊 Statistics", "🔍 Data Preview"])
@@ -384,11 +384,11 @@ if st.session_state.datasets:
                 ds = st.session_state.datasets[sel]
                 df = ds["df"]
                 if len(num_cols) > 0:
-                    st.dataframe(df[num_cols].describe(), use_container_width=True)
+                    st.dataframe(df[num_cols].describe(), width='stretch')
                 else:
                     st.info("No numeric columns found for statistics.")
             with tab_head:
-                st.dataframe(df.head(10), use_container_width=True)
+                st.dataframe(df.head(10), width='stretch')
 
     st.divider()
 
@@ -564,7 +564,7 @@ if st.session_state.datasets:
                     ),
                     hovermode="x unified",
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
 
                 # Remove fixed height/width before export to ensure fullscreen in browser
                 fig.update_layout(height=None, width=None)
@@ -709,7 +709,7 @@ if st.session_state.datasets:
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
                     hovermode="closest",
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
 
                 fig.update_layout(height=None, width=None)
                 buf = io.StringIO()
@@ -773,7 +773,7 @@ if st.session_state.datasets:
                     barmode="overlay",
                     bargap=0.05,
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
             else:
                 sel = st.selectbox("Select dataset", list(st.session_state.datasets.keys()), key="hist_ds", format_func=get_display_name)
                 ds = st.session_state.datasets[sel]
@@ -787,7 +787,7 @@ if st.session_state.datasets:
                         color_discrete_sequence=["#1E3A5F"]
                     )
                     fig.update_layout(template="plotly_white", bargap=0.1)
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width='stretch')
                 else:
                     st.warning(f"`{sel}` does not have column `{hist_col}`")
 
@@ -823,7 +823,7 @@ if st.session_state.datasets:
                     barmode="overlay",
                     bargap=0.05,
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
             else:
                 st.info("Select at least one file.")
 
@@ -857,7 +857,7 @@ if st.session_state.datasets:
                         color_discrete_sequence=px.colors.qualitative.Plotly
                     )
                     fig.update_layout(template="plotly_white", showlegend=False)
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width='stretch')
                 else:
                     st.warning("No data to plot.")
             else:
@@ -887,7 +887,7 @@ if st.session_state.datasets:
                         color_discrete_sequence=px.colors.qualitative.Set2
                     )
                     fig.update_layout(template="plotly_white", showlegend=False)
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width='stretch')
                 else:
                     st.warning(f"Selected dataset missing columns.")
 
@@ -925,7 +925,7 @@ if st.session_state.datasets:
                     yaxis=dict(showticklabels=False, title=""),
                     hovermode="closest",
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
             else:
                 st.info("Select at least one file.")
 
@@ -946,7 +946,7 @@ if st.session_state.datasets:
                     aspect="auto"
                 )
                 fig.update_layout(template="plotly_white")
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
 
                 fig.update_layout(height=None, width=None)
                 buf = io.StringIO()
@@ -1049,7 +1049,7 @@ if st.session_state.datasets:
                         showlegend=False,
                         boxmode="group",
                     )
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width='stretch')
 
                     fig.update_layout(height=None, width=None)
                     buf = io.StringIO()
@@ -1216,7 +1216,7 @@ if st.session_state.datasets:
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
                         margin=dict(l=0, r=0, b=0, t=40),
                     )
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width='stretch')
 
                     fig.update_layout(height=None, width=None)
                     buf = io.StringIO()
@@ -1303,12 +1303,13 @@ if st.session_state.datasets:
                             z_vals = plot_df[z3_axis].values
 
                             color = colors[i % len(colors)]
+                            display_name_str = st.session_state.datasets[fname]["display_name"]
                             fig.add_trace(go.Scatter3d(
                                 x=x_vals.tolist(),
                                 y=y_vals.tolist(),
                                 z=z_vals.tolist(),
                                 mode='markers',
-                                name=fname,
+                                name=display_name_str,
                                 marker=dict(
                                     color=color,
                                     size=marker_size,
@@ -1316,7 +1317,7 @@ if st.session_state.datasets:
                                 ),
                                 # line=dict(color=color, width=2.5),
                                 hovertemplate=(
-                                    f"<b>{fname}</b><br>"
+                                    f"<b>{display_name_str}</b><br>"
                                     f"Time: %{{x}}<br>"
                                     f"{y3_axis}: %{{y:.3f}}<br>"
                                     f"{z3_axis}: %{{z:.3f}}<extra></extra>"
@@ -1328,7 +1329,7 @@ if st.session_state.datasets:
                             template="plotly",
                             height=height_3d,
                             scene=dict(
-                                xaxis_title=dt_col_3d,
+                                xaxis=dict(title=dt_col_3d, tickformat="%Y-%m-%d", tickprefix="  "),
                                 yaxis_title=y3_axis,
                                 zaxis_title=z3_axis,
                                 camera=dict(eye=dict(x=1.2, y=1.5, z=1.0)),
@@ -1336,7 +1337,7 @@ if st.session_state.datasets:
                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
                             margin=dict(l=0, r=0, b=0, t=40),
                         )
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width='stretch')
 
                         fig.update_layout(height=None, width=None)
                         buf = io.StringIO()
