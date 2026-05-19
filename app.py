@@ -585,35 +585,7 @@ if st.session_state.datasets:
         if len(num_cols) < 2:
             st.warning("⚠️ Need at least 2 numeric columns for scatter plot.")
         else:
-            sc_x = st.selectbox("X-axis", num_cols, key="sc_x_multi")
-            sc_y = st.selectbox("Y-axis", num_cols, key="sc_y_multi")
-
-            col1, col2, col3 = st.columns([1, 1, 1])
-            with col1:
-                height = st.slider("Chart height (px)", 300, 800, 500, key="sc_h_multi")
-            with col2:
-                show_reg = st.checkbox("Show regression line", value=False, key="sc_reg_multi")
-            with col3:
-                resample_rule_sc = st.selectbox(
-                    "⏱️ Resample to",
-                    RESAMPLE_OPTIONS,
-                    index=RESAMPLE_OPTIONS.index(st.session_state.resample_rule),
-                    key="sc_resample_k",
-                    on_change=lambda: st.session_state.__setitem__("resample_rule", st.session_state.sc_resample_k),
-                )
-
-            # Max points control — only shown when resample = "All (native)"
-            if resample_rule_sc == "All (native)":
-                max_points = st.selectbox(
-                    "📊 Max points per file",
-                    [500, 1000, 2000, 5000, 10000, "All (may be slow)"],
-                    index=2,
-                    key="sc_max_points",
-                    format_func=lambda x: str(x) if isinstance(x, int) else x,
-                )
-            else:
-                max_points = "All (native)"
-
+            # 1. Select files to overlay
             selected_files_sc = st.multiselect(
                 "📂 Select files to overlay",
                 available_files,
@@ -621,6 +593,47 @@ if st.session_state.datasets:
                 key="sc_files",
                 format_func=get_display_name
             )
+
+            # 2. Resample to | Max points per file
+            res_col1, res_col2 = st.columns([1, 1])
+            with res_col1:
+                resample_rule_sc = st.selectbox(
+                    "⏱️ Resample to",
+                    RESAMPLE_OPTIONS,
+                    index=RESAMPLE_OPTIONS.index(st.session_state.resample_rule),
+                    key="sc_resample_k",
+                    on_change=lambda: st.session_state.__setitem__("resample_rule", st.session_state.sc_resample_k),
+                )
+            with res_col2:
+                if resample_rule_sc == "All (native)":
+                    max_points = st.selectbox(
+                        "📊 Max points per file",
+                        [500, 1000, 2000, 5000, 10000, "All (may be slow)"],
+                        index=2,
+                        key="sc_max_points",
+                        format_func=lambda x: str(x) if isinstance(x, int) else x,
+                    )
+                else:
+                    max_points = "All (native)"
+
+            # 3. Marker size | Opacity | Chart height
+            mc_col1, mc_col2, mc_col3 = st.columns([1, 1, 1])
+            with mc_col1:
+                sc_marker_size = st.slider("Marker size", 1, 20, 6, key="sc_marker_size")
+            with mc_col2:
+                sc_marker_opacity = st.slider("Opacity", 0.0, 1.0, 0.6, step=0.05, key="sc_marker_opacity")
+            with mc_col3:
+                height = st.slider("Chart height (px)", 300, 800, 500, key="sc_h_multi")
+
+            # 4. X-axis | Y-axis | Regression checkbox
+            sc_col1, sc_col2, sc_col3 = st.columns([1, 1, 1])
+            with sc_col1:
+                sc_x = st.selectbox("X-axis", num_cols, key="sc_x_multi")
+            with sc_col2:
+                sc_y = st.selectbox("Y-axis", num_cols, key="sc_y_multi")
+            with sc_col3:
+                st.markdown("&nbsp;", unsafe_allow_html=True)
+                show_reg = st.checkbox("Show regression line", value=False, key="sc_reg_multi")
 
             if not selected_files_sc:
                 st.info("Select at least one file above to plot.")
@@ -676,7 +689,7 @@ if st.session_state.datasets:
                         y=y_vals.tolist(),
                         mode='markers',
                         name=display_name_str,
-                        marker=dict(color=color, size=6, opacity=0.6),
+                        marker=dict(color=color, size=sc_marker_size, opacity=sc_marker_opacity),
                         hovertemplate=f"<b>{display_name_str}</b><br>{sc_x}: %{{x}}<br>{sc_y}: %{{y}}<extra></extra>",
                     ))
 
