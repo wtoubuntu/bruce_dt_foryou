@@ -26,6 +26,32 @@ def _coerce_numeric_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _parse_datetime(series: pd.Series) -> pd.Series:
+    """
+    Parse a timestamp column robustly. Turbine exports appear in more than one
+    format (e.g. "06/16/2026 10:21:00 AM" and ISO "2026-06-16 10:21:00"), so we
+    try the known explicit formats first and fall back to pandas inference.
+    Whichever attempt yields the most valid (non-NaT) timestamps wins.
+    """
+    known_formats = ["%m/%d/%Y %I:%M:%S %p", "%Y-%m-%d %H:%M:%S"]
+
+    best = None
+    best_valid = -1
+    for fmt in known_formats:
+        parsed = pd.to_datetime(series, format=fmt, errors="coerce")
+        valid = parsed.notna().sum()
+        if valid > best_valid:
+            best, best_valid = parsed, valid
+
+    # If no explicit format matched most rows, let pandas infer per-value.
+    if best_valid < len(series):
+        inferred = pd.to_datetime(series, errors="coerce")
+        if inferred.notna().sum() > best_valid:
+            best = inferred
+
+    return best
+
+
 def load_apa_csv(filepath, low_memory=True):
     """
     Load a CSV with metadata header rows.
@@ -61,9 +87,12 @@ def load_apa_csv(filepath, low_memory=True):
     try:
         data_ext_names = data.copy()
         data_ext_names.columns = ["datetime"] + ext_names
-        data_ext_names["datetime"] = pd.to_datetime(data_ext_names["datetime"], format="%m/%d/%Y %I:%M:%S %p", errors="coerce")
+        data_ext_names["datetime"] = _parse_datetime(data_ext_names["datetime"])
         data_ext_names = data_ext_names.dropna(subset=["datetime"])
         data_ext_names = data_ext_names.set_index("datetime")
+
+        if data_ext_names.empty:
+            raise ValueError("No rows survived datetime parsing with extended names.")
 
         data_ext_names = _coerce_numeric_columns(data_ext_names)
         data = data_ext_names
@@ -72,8 +101,8 @@ def load_apa_csv(filepath, low_memory=True):
         print(f"Fail to using extended names as columns, falling back to sensor IDs.")
         data_sensor_ids = data.copy()
         data_sensor_ids.columns = ["datetime"] + sensor_ids
-        
-        data_sensor_ids["datetime"] = pd.to_datetime(data_sensor_ids["datetime"], errors="coerce")
+
+        data_sensor_ids["datetime"] = _parse_datetime(data_sensor_ids["datetime"])
         data_sensor_ids = data_sensor_ids.dropna(subset=["datetime"])
         data_sensor_ids = data_sensor_ids.set_index("datetime")
 

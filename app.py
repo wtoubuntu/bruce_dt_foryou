@@ -371,11 +371,11 @@ if st.session_state.datasets:
             tab_stat, tab_head = st.tabs(["📊 Statistics", "🔍 Data Preview"])
             with tab_stat:
                 if len(num_cols) > 0:
-                    st.dataframe(df[num_cols].describe(), width='stretch')
+                    st.dataframe(df[num_cols].describe(), use_container_width=True)
                 else:
                     st.info("No numeric columns found for statistics.")
             with tab_head:
-                st.dataframe(df.head(10), width='stretch')
+                st.dataframe(df.head(10), use_container_width=True)
         else:
             # Multi-dataset — show comparison
             tab_stat, tab_head = st.tabs(["📊 Statistics", "🔍 Data Preview"])
@@ -384,11 +384,11 @@ if st.session_state.datasets:
                 ds = st.session_state.datasets[sel]
                 df = ds["df"]
                 if len(num_cols) > 0:
-                    st.dataframe(df[num_cols].describe(), width='stretch')
+                    st.dataframe(df[num_cols].describe(), use_container_width=True)
                 else:
                     st.info("No numeric columns found for statistics.")
             with tab_head:
-                st.dataframe(df.head(10), width='stretch')
+                st.dataframe(df.head(10), use_container_width=True)
 
     st.divider()
 
@@ -398,6 +398,56 @@ if st.session_state.datasets:
     st.subheader("🎨 Visualizations")
 
     available_files = list(st.session_state.datasets.keys())
+
+    # ── Persist widget selections across tab navigation ──────────────────────
+    # The tabs below are gated by `active_tab`, so only one renders per run.
+    # Streamlit discards the stored value of any keyed widget it doesn't render,
+    # which would otherwise reset every selection in the hidden tabs when you
+    # switch away and come back. Re-assigning each tab widget's key to itself
+    # here — before those widgets are created — keeps its value alive across
+    # runs. Option-based widgets first have any value that is no longer a valid
+    # option removed; otherwise Streamlit raises ("… is not in iterable" /
+    # "default value … is part of the options") when the widget is rebuilt.
+    _cols_widgets = ("sc_x_multi", "sc_y_multi", "ts_y_multi", "hist_col_multi",
+                     "hist_col_overlay", "box_val_multi", "box_val_cat",
+                     "dense_col_multi", "tod_val", "3d_x", "3d_y", "3d_z",
+                     "3d_line_y", "3d_line_z")
+    _cat_widgets  = ("box_cat_multi",)
+    _file_widgets = ("ts_files", "sc_files", "hist_files", "box_files",
+                     "dense_files", "3d_files", "3d_line_files",
+                     "hist_ds", "box_ds_cat", "corr_ds", "tod_ds")
+
+    def _persist_widgets(keys, valid_options=None):
+        valid = None if valid_options is None else set(valid_options)
+        for k in keys:
+            if k not in st.session_state:
+                continue
+            v = st.session_state[k]
+            if valid is None:
+                st.session_state[k] = v
+            elif isinstance(v, list):
+                st.session_state[k] = [x for x in v if x in valid]
+            elif v in valid:
+                st.session_state[k] = v
+            else:
+                del st.session_state[k]  # stale scalar → widget falls back to default
+
+    _persist_widgets(_cols_widgets, num_cols)
+    _persist_widgets(_cat_widgets, cat_cols)
+    _persist_widgets(_file_widgets, available_files)
+
+    # Fixed-option / value widgets (sliders, checkboxes, mode, bins, …) always
+    # persist safely. Excluded: the resample selectboxes (already kept in sync
+    # via `resample_rule`) and `3d_downsample_mult` (labels depend on row count).
+    _persist_skip = set(_cols_widgets + _cat_widgets + _file_widgets) | {
+        "viz_active_tab", "stats_dataset", "export_ds",
+        "ts_resample_k", "sc_resample_k", "3d_downsample_mult",
+    }
+    _tab_prefixes = ("ts_", "sc_", "3d_", "stat_", "hist_", "box_",
+                     "dense_", "corr_", "tod_")
+    for _k in list(st.session_state.keys()):
+        if _k not in _persist_skip and _k.startswith(_tab_prefixes):
+            st.session_state[_k] = st.session_state[_k]
 
     active_tab = st.radio(
         "Navigation",
@@ -564,7 +614,7 @@ if st.session_state.datasets:
                     ),
                     hovermode="x unified",
                 )
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
 
                 # Remove fixed height/width before export to ensure fullscreen in browser
                 fig.update_layout(height=None, width=None)
@@ -722,7 +772,7 @@ if st.session_state.datasets:
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
                     hovermode="closest",
                 )
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
 
                 fig.update_layout(height=None, width=None)
                 buf = io.StringIO()
@@ -786,7 +836,7 @@ if st.session_state.datasets:
                     barmode="overlay",
                     bargap=0.05,
                 )
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
             else:
                 sel = st.selectbox("Select dataset", list(st.session_state.datasets.keys()), key="hist_ds", format_func=get_display_name)
                 ds = st.session_state.datasets[sel]
@@ -800,7 +850,7 @@ if st.session_state.datasets:
                         color_discrete_sequence=["#1E3A5F"]
                     )
                     fig.update_layout(template="plotly_white", bargap=0.1)
-                    st.plotly_chart(fig, width='stretch')
+                    st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.warning(f"`{sel}` does not have column `{hist_col}`")
 
@@ -836,7 +886,7 @@ if st.session_state.datasets:
                     barmode="overlay",
                     bargap=0.05,
                 )
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
             else:
                 st.info("Select at least one file.")
 
@@ -870,7 +920,7 @@ if st.session_state.datasets:
                         color_discrete_sequence=px.colors.qualitative.Plotly
                     )
                     fig.update_layout(template="plotly_white", showlegend=False)
-                    st.plotly_chart(fig, width='stretch')
+                    st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.warning("No data to plot.")
             else:
@@ -900,7 +950,7 @@ if st.session_state.datasets:
                         color_discrete_sequence=px.colors.qualitative.Set2
                     )
                     fig.update_layout(template="plotly_white", showlegend=False)
-                    st.plotly_chart(fig, width='stretch')
+                    st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.warning(f"Selected dataset missing columns.")
 
@@ -938,7 +988,7 @@ if st.session_state.datasets:
                     yaxis=dict(showticklabels=False, title=""),
                     hovermode="closest",
                 )
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
             else:
                 st.info("Select at least one file.")
 
@@ -959,7 +1009,7 @@ if st.session_state.datasets:
                     aspect="auto"
                 )
                 fig.update_layout(template="plotly_white")
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
 
                 fig.update_layout(height=None, width=None)
                 buf = io.StringIO()
@@ -1062,7 +1112,7 @@ if st.session_state.datasets:
                         showlegend=False,
                         boxmode="group",
                     )
-                    st.plotly_chart(fig, width='stretch')
+                    st.plotly_chart(fig, use_container_width=True)
 
                     fig.update_layout(height=None, width=None)
                     buf = io.StringIO()
@@ -1225,7 +1275,7 @@ if st.session_state.datasets:
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
                         margin=dict(l=0, r=0, b=0, t=40),
                     )
-                    st.plotly_chart(fig, width='stretch')
+                    st.plotly_chart(fig, use_container_width=True)
 
                     fig.update_layout(height=None, width=None)
                     buf = io.StringIO()
@@ -1349,7 +1399,7 @@ if st.session_state.datasets:
                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
                             margin=dict(l=0, r=0, b=0, t=40),
                         )
-                        st.plotly_chart(fig, width='stretch')
+                        st.plotly_chart(fig, use_container_width=True)
 
                         fig.update_layout(height=None, width=None)
                         buf = io.StringIO()
